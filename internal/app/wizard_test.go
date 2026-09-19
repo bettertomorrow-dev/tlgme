@@ -649,7 +649,7 @@ func TestWizardSmokeRun(t *testing.T) {
 
 	outStr := out.String()
 	for _, want := range []string{
-		"TlgMe v0.1",
+		"TlgMe v" + version,
 		"─",
 		"Hey! Let's set things up.",
 		"Got it. Checking...",

@@ -1,4 +1,4 @@
 package app
 
-// version is the TlgMe version in major.minor form.
-const version = "0.1"
+// version is replaced with the release version at build time.
+var version = "dev"
