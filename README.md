@@ -2,6 +2,22 @@
 
 `tlgme` sends plain-text Telegram messages and can wait for replies.
 
+## Install
+
+Install the latest release with Homebrew on macOS or Linux:
+
+```bash
+brew install --cask bettertomorrow-dev/tap/tlgme
+```
+
+Prebuilt archives for macOS, Linux, and Windows are also available from
+[GitHub Releases](https://github.com/bettertomorrow-dev/tlgme/releases). Verify
+the installation with:
+
+```bash
+tlgme --version
+```
+
 ## First run
 
 Create a bot through [@BotFather](https://t.me/BotFather) with `/newbot`, then run:
@@ -147,3 +163,23 @@ tlgme --learn
 Then send `/start` to the bot. Learning and prompt modes use Telegram long
 polling and cannot run while the bot has an active webhook. Press Ctrl+C to
 stop waiting.
+
+## Releases
+
+Every merge to `main` is released after CI passes. `VERSION` contains the
+major and minor version. The release workflow calculates the patch number from
+the first-parent history, creates the Git tag and GitHub Release, and updates
+the Homebrew cask. Changing `VERSION` from `0.1` to `0.2` makes that merge the
+`v0.2.0` release.
+
+Before merging a release-system change, test the package locally with:
+
+```bash
+goreleaser release --snapshot --clean
+```
+
+The `bettertomorrow-dev/homebrew-tap` repository must exist, and this
+repository must have an Actions secret named `TAP_GITHUB_TOKEN`. The token
+needs Contents read/write access to the tap repository. Use the Release
+workflow's manual trigger to retry a failed publication for a specific commit.
+See [Release setup](docs/releases.md) for the one-time GitHub configuration.

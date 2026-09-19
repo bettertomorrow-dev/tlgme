@@ -2,6 +2,8 @@ package app
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -15,6 +17,19 @@ func TestRunInterface(t *testing.T) {
 		var stdout, stderr strings.Builder
 		code := Run(context.Background(), []string{"--help"}, strings.NewReader(""), &stdout, &stderr)
 		if code != 0 || !strings.Contains(stdout.String(), "Usage:") || stderr.Len() != 0 {
+			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+		}
+	})
+
+	t.Run("version does not read config", func(t *testing.T) {
+		configParent := filepath.Join(t.TempDir(), "not-a-directory")
+		if err := os.WriteFile(configParent, []byte("occupied"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		t.Setenv("XDG_CONFIG_HOME", configParent)
+		var stdout, stderr strings.Builder
+		code := Run(context.Background(), []string{"--version"}, strings.NewReader(""), &stdout, &stderr)
+		if code != 0 || stdout.String() != "tlgme "+version+"\n" || stderr.Len() != 0 {
 			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 		}
 	})

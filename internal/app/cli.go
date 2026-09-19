@@ -43,6 +43,7 @@ type cliOptions struct {
 	prompt    bool
 	learn     bool
 	help      bool
+	version   bool
 }
 
 type settings struct {
@@ -67,6 +68,7 @@ func parseCLI(args []string) (cliOptions, error) {
 	flags.BoolVar(&opts.learn, "learn", false, "learn and save a private chat ID from /start")
 	flags.BoolVar(&opts.help, "help", false, "show help")
 	flags.BoolVar(&opts.help, "h", false, "show help")
+	flags.BoolVar(&opts.version, "version", false, "show version")
 
 	if err := flags.Parse(args); err != nil {
 		return cliOptions{}, fmt.Errorf("%w\n\n%s", err, usageText)
@@ -76,6 +78,12 @@ func parseCLI(args []string) (cliOptions, error) {
 	}
 	if flags.NArg() != 0 {
 		return cliOptions{}, fmt.Errorf("unexpected positional arguments: %s\n\n%s", strings.Join(flags.Args(), " "), usageText)
+	}
+	if opts.version {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set {
+			return cliOptions{}, errors.New("--version cannot be combined with other options")
+		}
+		return opts, nil
 	}
 
 	setMode := opts.setToken.set || opts.setChatID.set
@@ -152,10 +160,15 @@ Options:
   --set-token TOKEN  Save a bot token without API validation.
   --set-chat-id ID   Save a numeric chat ID or @username.
   --learn            Replace the saved chat ID after receiving /start.
+  --version          Show the installed version.
   --help, -h         Show this help.`
 
 func (app application) printHelp() {
 	fmt.Fprintln(app.stdout, usageText)
+}
+
+func (app application) printVersion() {
+	fmt.Fprintf(app.stdout, "tlgme %s\n", version)
 }
 
 func (app application) resolveSettings(cfg config, opts cliOptions) (settings, error) {

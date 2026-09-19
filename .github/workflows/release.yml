@@ -1,0 +1,110 @@
+name: Release
+
+on:
+  workflow_run:
+    workflows:
+      - CI
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Commit SHA whose failed publication should be retried
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Select revision
+        id: revision
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          WORKFLOW_REVISION: ${{ github.event.workflow_run.head_sha }}
+          MANUAL_REVISION: ${{ inputs.revision }}
+        run: |
+          if [ "$EVENT_NAME" = "workflow_run" ]; then
+            revision="$WORKFLOW_REVISION"
+          else
+            revision="$MANUAL_REVISION"
+          fi
+          printf 'revision=%s\n' "$revision" >> "$GITHUB_OUTPUT"
+
+      - name: Check out tested commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: ${{ steps.revision.outputs.revision }}
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Calculate release version
+        id: version
+        env:
+          REVISION: ${{ steps.revision.outputs.revision }}
+        run: |
+          sha="$(git rev-parse "$REVISION^{commit}")"
+          git fetch origin main
+          if ! git merge-base --is-ancestor "$sha" origin/main; then
+            printf 'Commit %s is not part of main.\n' "$sha" >&2
+            exit 1
+          fi
+          tag="$(go run ./internal/releaseversion/cmd -revision "$sha")"
+          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
+          printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Check Homebrew tap access
+        env:
+          GH_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            printf 'TAP_GITHUB_TOKEN is not configured.\n' >&2
+            exit 1
+          fi
+          default_branch="$(gh api repos/bettertomorrow-dev/homebrew-tap --jq .default_branch)"
+          if [ "$default_branch" != "main" ]; then
+            printf 'Homebrew tap default branch is %s, expected main.\n' "$default_branch" >&2
+            exit 1
+          fi
+
+      - name: Create release tag
+        env:
+          SHA: ${{ steps.version.outputs.sha }}
+          TAG: ${{ steps.version.outputs.tag }}
+        run: |
+          git fetch --force --tags origin
+          if git show-ref --verify --quiet "refs/tags/$TAG"; then
+            target="$(git rev-list -n 1 "$TAG")"
+            if [ "$target" != "$SHA" ]; then
+              printf 'Tag %s points to %s, expected %s\n' "$TAG" "$target" "$SHA" >&2
+              exit 1
+            fi
+            printf 'Tag %s already points to the tested commit.\n' "$TAG"
+          else
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git tag -a "$TAG" "$SHA" -m "tlgme $TAG"
+            git push origin "refs/tags/$TAG"
+          fi
+
+      - name: Publish release
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          version: v2.18.2
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}

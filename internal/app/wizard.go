@@ -25,9 +25,10 @@ const (
 	binDirEnv       = "TLGME_BIN_DIR"
 	shellEnv        = "SHELL"
 	programName     = "tlgme"
-	testMessageText = "TlgMe v" + version + " is connected 👋"
 	usageExamples   = "  tlgme --text \"Hello from terminal\"\n  tlgme --text \"Question?\" --prompt"
 )
+
+var testMessageText = "TlgMe v" + version + " is connected 👋"
 
 // silentExitError reports a setup exit whose reason was already shown in the
 // transcript, so main must not print it again.

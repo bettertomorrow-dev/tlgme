@@ -115,6 +115,10 @@ func (app application) run(ctx context.Context, args []string) error {
 		app.printHelp()
 		return nil
 	}
+	if opts.version {
+		app.printVersion()
+		return nil
+	}
 
 	path, err := app.configPath()
 	if err != nil {

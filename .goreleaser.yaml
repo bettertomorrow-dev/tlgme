@@ -1,0 +1,66 @@
+version: 2
+
+project_name: tlgme
+
+builds:
+  - id: tlgme
+    main: .
+    binary: tlgme
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X github.com/bettertomorrow-dev/tlgme/internal/app.version={{ .Version }}
+    goos:
+      - darwin
+      - linux
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+archives:
+  - id: tlgme
+    ids:
+      - tlgme
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github-native
+
+release:
+  mode: keep-existing
+  replace_existing_artifacts: true
+  preflight:
+    fail_on_error: true
+
+homebrew_casks:
+  - name: tlgme
+    ids:
+      - tlgme
+    binaries:
+      - tlgme
+    repository:
+      owner: bettertomorrow-dev
+      name: homebrew-tap
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: Casks
+    homepage: https://github.com/bettertomorrow-dev/tlgme
+    description: Send Telegram messages and wait for replies from the command line
+    license: MIT
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/tlgme"]
+          end

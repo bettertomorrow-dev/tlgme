@@ -30,3 +30,17 @@ func TestParseCLI(t *testing.T) {
 		}
 	}
 }
+
+func TestParseVersion(t *testing.T) {
+	opts, err := parseCLI([]string{"--version"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.version {
+		t.Fatal("version flag was not set")
+	}
+
+	if _, err := parseCLI([]string{"--version", "--text", "hello"}); err == nil || !strings.Contains(err.Error(), "cannot be combined") {
+		t.Fatalf("got %v", err)
+	}
+}
