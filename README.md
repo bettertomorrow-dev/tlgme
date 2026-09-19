@@ -164,6 +164,13 @@ Then send `/start` to the bot. Learning and prompt modes use Telegram long
 polling and cannot run while the bot has an active webhook. Press Ctrl+C to
 stop waiting.
 
+## Skill
+
+This repository ships the [`tlg` skill](skills/tlg/SKILL.md), which teaches
+agents to send a one-line completion ping and ask questions through `tlgme`.
+Install it from
+[skills/tlg](https://github.com/bettertomorrow-dev/tlgme/tree/main/skills/tlg).
+
 ## Releases
 
 Every merge to `main` is released after CI passes. `VERSION` contains the
