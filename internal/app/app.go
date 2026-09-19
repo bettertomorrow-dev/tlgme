@@ -42,23 +42,26 @@ var (
 )
 
 type application struct {
-	getenv         func(string) string
-	stdin          io.Reader
-	stdout         io.Writer
-	stderr         io.Writer
-	now            func() time.Time
-	configPath     func() (string, error)
-	validateToken  func(context.Context, string) (string, error)
-	checkAPI       func(context.Context) error
-	lookPath       func(string) (string, error)
-	learn          func(context.Context, string, time.Time) (int64, error)
-	send           func(context.Context, string, any, outgoing) (int, error)
-	awaitAnswer    func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error)
-	answerCallback func(context.Context, string, string) error
-	removeKeyboard func(context.Context, string, int64, int) error
-	appendAnswer   func(context.Context, string, int64, int, string, bool) error
-	react          func(context.Context, string, int64, int, string) error
-	redactions     *[]string
+	getenv          func(string) string
+	stdin           io.Reader
+	stdout          io.Writer
+	stderr          io.Writer
+	now             func() time.Time
+	configPath      func() (string, error)
+	validateToken   func(context.Context, string) (string, error)
+	checkAPI        func(context.Context) error
+	lookPath        func(string) (string, error)
+	learn           func(context.Context, string, time.Time) (int64, error)
+	send            func(context.Context, string, any, outgoing) (int, error)
+	awaitAnswer     func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error)
+	answerCallback  func(context.Context, string, string) error
+	removeKeyboard  func(context.Context, string, int64, int) error
+	appendAnswer    func(context.Context, string, int64, int, string, bool) error
+	react           func(context.Context, string, int64, int, string) error
+	redactions      *[]string
+	updateCachePath func() (string, error)
+	latestRelease   func(context.Context) (releaseInfo, error)
+	installRelease  func(context.Context, releaseInfo) error
 }
 
 // Run executes tlgme with the supplied arguments and process streams.
@@ -74,24 +77,27 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	}
 	redactions := []string{os.Getenv(botTokenEnv)}
 	app := application{
-		getenv:         os.Getenv,
-		stdin:          stdin,
-		stdout:         stdout,
-		stderr:         stderr,
-		now:            time.Now,
-		configPath:     defaultConfigPath,
-		validateToken:  validateBotToken,
-		checkAPI:       checkTelegramAPI,
-		lookPath:       exec.LookPath,
-		learn:          learnChat,
-		send:           sendOutgoing,
-		awaitAnswer:    awaitAnswer,
-		answerCallback: answerCallbackQuery,
-		removeKeyboard: removeInlineKeyboard,
-		appendAnswer:   appendAnswer,
-		react:          react,
-		redactions:     &redactions,
+		getenv:          os.Getenv,
+		stdin:           stdin,
+		stdout:          stdout,
+		stderr:          stderr,
+		now:             time.Now,
+		configPath:      defaultConfigPath,
+		validateToken:   validateBotToken,
+		checkAPI:        checkTelegramAPI,
+		lookPath:        exec.LookPath,
+		learn:           learnChat,
+		send:            sendOutgoing,
+		awaitAnswer:     awaitAnswer,
+		answerCallback:  answerCallbackQuery,
+		removeKeyboard:  removeInlineKeyboard,
+		appendAnswer:    appendAnswer,
+		react:           react,
+		redactions:      &redactions,
+		updateCachePath: defaultUpdateCachePath,
+		latestRelease:   fetchLatestRelease,
 	}
+	app.installRelease = newReleaseInstaller(stdout, stderr).install
 
 	if err := app.run(ctx, args); err != nil {
 		var silent silentExitError
@@ -112,9 +118,14 @@ func (app application) run(ctx context.Context, args []string) error {
 	app.rememberSecret(opts.token.value)
 	app.rememberSecret(opts.setToken.value)
 	if opts.help {
+		defer app.notifyUpdate(ctx)
 		app.printHelp()
 		return nil
 	}
+	if opts.update {
+		return app.runUpdate(ctx)
+	}
+	defer app.notifyUpdate(ctx)
 	if opts.version {
 		app.printVersion()
 		return nil

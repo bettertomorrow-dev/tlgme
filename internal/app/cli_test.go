@@ -44,3 +44,24 @@ func TestParseVersion(t *testing.T) {
 		t.Fatalf("got %v", err)
 	}
 }
+
+func TestParseUpdate(t *testing.T) {
+	opts, err := parseCLI([]string{"--update"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.update {
+		t.Fatal("update flag was not set")
+	}
+
+	for _, args := range [][]string{
+		{"--update", "--text", "hello"},
+		{"--update", "--version"},
+		{"--update", "--help"},
+		{"--update", "--set-chat-id", "42"},
+	} {
+		if _, err := parseCLI(args); err == nil || !strings.Contains(err.Error(), "cannot be combined") {
+			t.Fatalf("args=%v error=%v", args, err)
+		}
+	}
+}

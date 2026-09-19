@@ -164,6 +164,44 @@ Then send `/start` to the bot. Learning and prompt modes use Telegram long
 polling and cannot run while the bot has an active webhook. Press Ctrl+C to
 stop waiting.
 
+## Updates
+
+Once a day, `tlgme` checks the latest GitHub Release after finishing the
+requested command. When an update is available, it writes a notice to stderr:
+
+```text
+TlgMe update available: 0.1.2 → 0.1.3
+https://github.com/bettertomorrow-dev/tlgme/releases/tag/v0.1.3
+
+Run:
+tlgme --update
+```
+
+The URL is bright cyan, italic, and clickable in terminals that support color
+and hyperlinks. Redirected output receives the plain URL. The notice never
+changes the result of a Telegram send, and prompt answers remain the only
+content written to stdout.
+
+The release check is cached for 24 hours. Set `TLGME_NO_UPDATE_CHECK=1` to
+disable automatic checks. You can still request an update explicitly:
+
+```bash
+tlgme --update
+```
+
+Homebrew installations are upgraded through `brew upgrade --cask
+bettertomorrow-dev/tap/tlgme`. Direct installations download the release for
+the current operating system and architecture, verify its published SHA-256
+checksum, and replace the executable. The updater supports the same macOS,
+Linux, and Windows targets published on the Releases page.
+
+## Skill
+
+This repository ships the [`tlg` skill](skills/tlg/SKILL.md), which teaches
+agents to send a one-line completion ping and ask questions through `tlgme`.
+Install it from
+[skills/tlg](https://github.com/bettertomorrow-dev/tlgme/tree/main/skills/tlg).
+
 ## Releases
 
 Every merge to `main` is released after CI passes. `VERSION` contains the
