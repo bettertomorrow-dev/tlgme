@@ -406,10 +406,14 @@ func (w wizard) blockMsg(from, body string, status chatStatus) string {
 }
 
 func (w wizard) hyperlink(url string) string {
-	if w.out.ColorProfile() == termenv.Ascii {
+	return renderHyperlink(w.out, url)
+}
+
+func renderHyperlink(r *lipgloss.Renderer, url string) string {
+	if r.ColorProfile() == termenv.Ascii {
 		return url
 	}
-	text := w.out.NewStyle().Foreground(lipgloss.Color("14")).Italic(true).Render(url)
+	text := r.NewStyle().Foreground(lipgloss.Color("14")).Italic(true).Render(url)
 	return "\x1b]8;;" + url + "\x1b\\" + text + "\x1b]8;;\x1b\\"
 }
 

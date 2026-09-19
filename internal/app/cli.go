@@ -44,6 +44,7 @@ type cliOptions struct {
 	learn     bool
 	help      bool
 	version   bool
+	update    bool
 }
 
 type settings struct {
@@ -69,19 +70,29 @@ func parseCLI(args []string) (cliOptions, error) {
 	flags.BoolVar(&opts.help, "help", false, "show help")
 	flags.BoolVar(&opts.help, "h", false, "show help")
 	flags.BoolVar(&opts.version, "version", false, "show version")
+	flags.BoolVar(&opts.update, "update", false, "update tlgme to the latest release")
 
 	if err := flags.Parse(args); err != nil {
 		return cliOptions{}, fmt.Errorf("%w\n\n%s", err, usageText)
 	}
 	if opts.help {
+		if opts.update {
+			return cliOptions{}, errors.New("--update cannot be combined with other options")
+		}
 		return opts, nil
 	}
 	if flags.NArg() != 0 {
 		return cliOptions{}, fmt.Errorf("unexpected positional arguments: %s\n\n%s", strings.Join(flags.Args(), " "), usageText)
 	}
 	if opts.version {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.update {
 			return cliOptions{}, errors.New("--version cannot be combined with other options")
+		}
+		return opts, nil
+	}
+	if opts.update {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set {
+			return cliOptions{}, errors.New("--update cannot be combined with other options")
 		}
 		return opts, nil
 	}
@@ -161,6 +172,7 @@ Options:
   --set-chat-id ID   Save a numeric chat ID or @username.
   --learn            Replace the saved chat ID after receiving /start.
   --version          Show the installed version.
+  --update           Update tlgme to the latest release.
   --help, -h         Show this help.`
 
 func (app application) printHelp() {

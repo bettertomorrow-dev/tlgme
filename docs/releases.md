@@ -47,6 +47,23 @@ The snapshot should contain six archives and `checksums.txt`. After the setup
 pull request is squash-merged and CI passes, the release workflow creates
 `v0.1.0`, publishes the GitHub Release, and writes `Casks/tlgme.rb` to the tap.
 
+The CLI updater depends on these asset names remaining stable:
+
+```text
+tlgme_VERSION_darwin_amd64.tar.gz
+tlgme_VERSION_darwin_arm64.tar.gz
+tlgme_VERSION_linux_amd64.tar.gz
+tlgme_VERSION_linux_arm64.tar.gz
+tlgme_VERSION_windows_amd64.zip
+tlgme_VERSION_windows_arm64.zip
+checksums.txt
+```
+
+Each archive must contain `tlgme`, or `tlgme.exe` on Windows, at its root.
+`checksums.txt` must include the SHA-256 checksum for every archive. Changing
+this contract requires a backward-compatible updater change in an earlier
+release.
+
 Verify the published package:
 
 ```bash
