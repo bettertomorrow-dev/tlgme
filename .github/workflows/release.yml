@@ -23,6 +23,8 @@ jobs:
       github.event.workflow_run.event == 'push' &&
       github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - name: Select revision
         id: revision
@@ -108,3 +110,34 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+
+  publish-winget:
+    name: Publish WinGet manifest
+    needs: release
+    runs-on: windows-latest
+    steps:
+      - name: Install Winget-Create
+        shell: pwsh
+        run: Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+
+      - name: Submit WinGet manifest update
+        shell: pwsh
+        env:
+          WINGET_CREATE_TOKEN: ${{ secrets.WINGET_CREATE_TOKEN }}
+          TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:WINGET_CREATE_TOKEN)) {
+            throw "WINGET_CREATE_TOKEN is not configured."
+          }
+
+          $version = $env:TAG.TrimStart('v')
+          $base = "https://github.com/bettertomorrow-dev/tlgme/releases/download/$($env:TAG)"
+
+          .\wingetcreate.exe update BetterTomorrowDev.TlgMe `
+            --version $version `
+            --urls `
+              "$base/tlgme_${version}_windows_amd64.zip|x64" `
+              "$base/tlgme_${version}_windows_arm64.zip|arm64" `
+            --submit `
+            --token $env:WINGET_CREATE_TOKEN `
+            --no-open

@@ -74,3 +74,6 @@ tlgme --version
 Use the Release workflow's manual trigger with the original commit SHA if a
 temporary GitHub or Homebrew failure needs a retry. Never move an existing
 release tag. Publish a new patch release for application or build defects.
+
+See [WinGet publishing](winget.md) for the one-time manifest submission and
+the automated Windows package updates.
