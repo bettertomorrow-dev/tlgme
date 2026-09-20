@@ -13,9 +13,11 @@ $ErrorActionPreference = 'Stop'
 $repo = 'bettertomorrow-dev/tlgme'
 $latestReleaseUrl = "https://api.github.com/repos/$repo/releases/latest"
 $supportsColor = -not [Console]::IsOutputRedirected -and $env:TERM -ne 'dumb'
+$background = ($env:COLORFGBG -split ';' | Select-Object -Last 1)
+$secondaryColor = if ($background -match '^\d+$' -and [int]$background -ge 7) { [ConsoleColor]::DarkGray } else { [ConsoleColor]::Gray }
 
 function Write-InstallerText {
-    param([string]$Text, [ConsoleColor]$Color = [ConsoleColor]::Gray, [switch]$NoNewline)
+    param([string]$Text, [ConsoleColor]$Color = $secondaryColor, [switch]$NoNewline)
     if ($supportsColor) {
         Write-Host $Text -ForegroundColor $Color -NoNewline:$NoNewline
     } else {
@@ -23,19 +25,31 @@ function Write-InstallerText {
     }
 }
 
+function Write-Primary {
+    param([string]$Text, [switch]$NoNewline)
+    Write-Host $Text -NoNewline:$NoNewline
+}
+
 function Write-Title {
     Write-InstallerText '>' Cyan -NoNewline
     Write-Host ' ' -NoNewline
-    Write-InstallerText 'TlgMe' White -NoNewline
+    Write-Primary 'TlgMe' -NoNewline
     Write-Host ' ' -NoNewline
-    Write-InstallerText "installer for Windows, $Architecture" Gray
+    Write-InstallerText "installer for Windows, $Architecture"
     Write-Host ''
 }
 
 function Write-SetupPrompt {
-    Write-InstallerText 'Run TlgMe first-time setup now?' White -NoNewline
+    Write-Primary 'Run TlgMe first-time setup now?' -NoNewline
     Write-Host ' ' -NoNewline
-    Write-InstallerText '[Y/n]:' Gray -NoNewline
+    Write-InstallerText '[Y/n]:' -NoNewline
+    return Read-Host
+}
+
+function Read-ReinstallPrompt {
+    Write-Primary 'Reinstall TlgMe anyway?' -NoNewline
+    Write-Host ' ' -NoNewline
+    Write-InstallerText '[y/N]:' -NoNewline
     return Read-Host
 }
 
@@ -84,22 +98,34 @@ function Invoke-Preview {
         $answer = Write-SetupPrompt
         Write-Host ''
         if ($answer -notmatch '^[Nn]$') {
-            Write-InstallerText 'Preview would now launch TlgMe setup.' White
+            Write-Primary 'Preview would now launch TlgMe setup.'
         } else {
-            Write-InstallerText 'Run `tlgme` whenever you are ready to finish setup.' White
+            Write-Primary 'Run `tlgme` whenever you are ready to finish setup.'
         }
     } else {
+        $current = 'v0.1.3'
         $installDir = Join-Path $env:LOCALAPPDATA 'tlgme'
-        Write-InstallerText "Existing installation found at $(Join-Path $installDir 'tlgme.exe')." White
-        Write-InstallerText 'This will replace it with the latest release.' White
+        Write-Primary "Existing installation found at $(Join-Path $installDir 'tlgme.exe')."
+        if ($current -eq $latest) {
+            Write-Primary "TlgMe is up to date ($latest)."
+            $answer = Read-ReinstallPrompt
+            if ($answer -notmatch '^[Yy]$') {
+                Write-Host ''
+                Write-InstallerText 'Preview complete. Nothing was downloaded or changed.'
+                return
+            }
+            Write-Primary "Reinstalling TlgMe $latest."
+        } else {
+            Write-Primary 'This will replace it with the latest release.'
+        }
         Write-Host ''
         Write-InstallerText "Downloading TlgMe $latest..."
         Write-InstallerText 'Verifying download...'
         Write-InstallerText 'Updating TlgMe...'
-        Write-InstallerText "TlgMe updated successfully: v0.1.3 → $latest." White
+        Write-Primary "TlgMe updated successfully: v0.1.3 → $latest."
     }
     Write-Host ''
-    Write-InstallerText 'Preview complete. Nothing was downloaded or changed.' Gray
+    Write-InstallerText 'Preview complete. Nothing was downloaded or changed.'
 }
 
 function Install-TlgMe {
@@ -113,13 +139,21 @@ function Install-TlgMe {
         $currentVersion = $null
     }
     if ($existing) {
-        Write-InstallerText "Existing installation found at $binaryPath." White
-        Write-InstallerText 'This will replace it with the latest release.' White
-        Write-Host ''
+        Write-Primary "Existing installation found at $binaryPath."
     }
 
     $release = Get-LatestRelease
     $version = $release.tag_name
+    if ($existing -and $currentVersion -eq $version) {
+        Write-Primary "TlgMe is up to date ($version)."
+        $answer = Read-ReinstallPrompt
+        if ($answer -notmatch '^[Yy]$') { return }
+        Write-Primary "Reinstalling TlgMe $version."
+        Write-Host ''
+    } elseif ($existing) {
+        Write-Primary 'This will replace it with the latest release.'
+        Write-Host ''
+    }
     $assetName = "tlgme_$($version.TrimStart('v'))_windows_$Architecture.zip"
     $asset = $release.assets | Where-Object { $_.name -eq $assetName } | Select-Object -First 1
     $checksums = $release.assets | Where-Object { $_.name -eq 'checksums.txt' } | Select-Object -First 1
@@ -160,7 +194,7 @@ function Install-TlgMe {
 
     if ($existing) {
         $from = if ($currentVersion) { $currentVersion } else { 'the installed version' }
-        Write-InstallerText "TlgMe updated successfully: $from → $version." White
+        Write-Primary "TlgMe updated successfully: $from → $version."
         return
     }
     Write-InstallerText "TlgMe $version installed successfully."
@@ -170,7 +204,7 @@ function Install-TlgMe {
     if ($answer -notmatch '^[Nn]$') {
         & $binaryPath
     } else {
-        Write-InstallerText 'Run `tlgme` whenever you are ready to finish setup.' White
+        Write-Primary 'Run `tlgme` whenever you are ready to finish setup.'
     }
 }
 

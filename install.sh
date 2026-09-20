@@ -9,6 +9,7 @@ scenario=""
 platform=""
 arch=""
 release_version=""
+cleanup_dir=""
 
 usage() {
   printf 'Usage: bash install.sh [--preview] [--scenario first|update] [--platform darwin|linux] [--arch amd64|arm64] [--version vX.Y.Z]\n'
@@ -57,20 +58,23 @@ fi
 
 if [[ -t 1 && "${TERM:-}" != "dumb" ]]; then
   cyan=$'\033[36m'
-  white=$'\033[97m'
-  gray=$'\033[90m'
   red=$'\033[31m'
   reset=$'\033[0m'
+  background="${COLORFGBG##*;}"
+  if [[ "$background" =~ ^[0-9]+$ && "$background" -ge 7 ]]; then
+    secondary=$'\033[90m'
+  else
+    secondary=$'\033[37m'
+  fi
 else
   cyan=""
-  white=""
-  gray=""
   red=""
   reset=""
+  secondary=""
 fi
 
-info() { printf '%s%s%s\n' "$gray" "$1" "$reset"; }
-success() { printf '%s%s%s\n' "$white" "$1" "$reset"; }
+info() { printf '%s%s%s\n' "$secondary" "$1" "$reset"; }
+success() { printf '%s\n' "$1"; }
 failure() { printf '%s%s%s\n' "$red" "$1" "$reset" >&2; }
 
 has_tty() {
@@ -119,20 +123,30 @@ display_platform() {
 }
 
 print_title() {
-  printf '%s>%s %sTlgMe%s %sinstaller for %s, %s%s\n\n' \
-    "$cyan" "$reset" "$white" "$reset" "$gray" "$(display_platform)" "$arch" "$reset"
+  printf '%s>%s TlgMe %sinstaller for %s, %s%s\n\n' \
+    "$cyan" "$reset" "$secondary" "$(display_platform)" "$arch" "$reset"
 }
 
 print_global_prompt() {
-  printf '%sInstall globally for all users?%s %sOptional%s\n' "$white" "$reset" "$gray" "$reset"
+  printf 'Install globally for all users? %sOptional%s\n' "$secondary" "$reset"
   info 'Installs `tlgme` in /usr/local/bin, so every user and automation on this computer can run it.'
   info 'Useful on shared machines and headless servers where agents run under different accounts.'
   info 'Requires sudo permission.'
-  printf '%s[y/N]:%s ' "$white" "$reset"
+  printf '[y/N]: '
 }
 
 print_setup_prompt() {
-  printf '%sRun TlgMe first-time setup now?%s %s[Y/n]:%s ' "$white" "$reset" "$gray" "$reset"
+  printf 'Run TlgMe first-time setup now? %s[Y/n]:%s ' "$secondary" "$reset"
+}
+
+print_reinstall_prompt() {
+  printf 'Reinstall TlgMe anyway? %s[y/N]:%s ' "$secondary" "$reset"
+}
+
+cleanup() {
+  if [[ -n "${cleanup_dir:-}" ]]; then
+    rm -rf -- "$cleanup_dir"
+  fi
 }
 
 latest_version() {
@@ -186,7 +200,7 @@ verify_archive() {
 }
 
 run_preview() {
-  local installed_version="$release_version" latest="$release_version"
+  local latest="$release_version"
   [[ -n "$scenario" ]] || scenario="first"
   case "$scenario" in
     first|update) ;;
@@ -222,7 +236,21 @@ run_preview() {
   else
     local current="v0.1.3"
     success "Existing installation found at $HOME/.local/bin/tlgme."
-    success 'This will replace it with the latest release.'
+    if [[ "$current" == "$latest" ]]; then
+      success "TlgMe is up to date ($latest)."
+      print_reinstall_prompt
+      local reinstall_answer
+      reinstall_answer="$(prompt)"
+      printf '\n'
+      if [[ ! "$reinstall_answer" =~ ^[Yy]$ ]]; then
+        printf '\n'
+        info 'Preview complete. Nothing was downloaded or changed.'
+        return
+      fi
+      success "Reinstalling TlgMe $latest."
+    else
+      success 'This will replace it with the latest release.'
+    fi
     printf '\n'
     info "Downloading TlgMe $latest..."
     info 'Verifying download...'
@@ -263,17 +291,31 @@ main() {
       current_version="v$current_version"
     fi
     success "Existing installation found at $install_dir/tlgme."
-    success 'This will replace it with the latest release.'
-    printf '\n'
   fi
 
   latest="$(latest_version)"
   release_version="$latest"
+  if "$existing" && [[ "$current_version" == "$release_version" ]]; then
+    success "TlgMe is up to date ($release_version)."
+    print_reinstall_prompt
+    local reinstall_answer
+    reinstall_answer="$(prompt)"
+    printf '\n'
+    if [[ ! "$reinstall_answer" =~ ^[Yy]$ ]]; then
+      return
+    fi
+    success "Reinstalling TlgMe $release_version."
+    printf '\n'
+  elif "$existing"; then
+    success 'This will replace it with the latest release.'
+    printf '\n'
+  fi
   archive_name="tlgme_${release_version#v}_${platform}_${arch}.tar.gz"
   archive_url="https://github.com/$repo/releases/download/$release_version/$archive_name"
   checksums_url="https://github.com/$repo/releases/download/$release_version/checksums.txt"
   temp_dir="$(mktemp -d)"
-  trap 'rm -rf "$temp_dir"' EXIT
+  cleanup_dir="$temp_dir"
+  trap cleanup EXIT
 
   info "Downloading TlgMe $release_version..."
   curl -fsSL "$archive_url" -o "$temp_dir/$archive_name"
