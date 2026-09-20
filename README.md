@@ -10,9 +10,35 @@ Install the latest release with Homebrew on macOS or Linux:
 brew install --cask bettertomorrow-dev/tap/tlgme
 ```
 
+Or run the installer for the latest release. On macOS and Linux, it asks whether
+to install globally with `sudo` or for the current user. On a first install, it
+can open TlgMe's setup right away.
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/bettertomorrow-dev/tlgme/main/install.sh | bash
+```
+
+In PowerShell on Windows:
+
+```powershell
+irm https://raw.githubusercontent.com/bettertomorrow-dev/tlgme/main/install.ps1 | iex
+```
+
+To try the installer locally without downloading anything or changing your
+computer, run a preview from a repository checkout:
+
+```bash
+bash ./install.sh --preview --scenario first --platform darwin --arch arm64
+bash ./install.sh --preview --scenario update --platform linux --arch amd64
+```
+
+```powershell
+.\install.ps1 -Preview -Scenario First -Architecture arm64
+.\install.ps1 -Preview -Scenario Update -Architecture amd64
+```
+
 Prebuilt archives for macOS, Linux, and Windows are also available from
-[GitHub Releases](https://github.com/bettertomorrow-dev/tlgme/releases). Verify
-the installation with:
+[GitHub Releases](https://github.com/bettertomorrow-dev/tlgme/releases). Verify the installation with:
 
 ```bash
 tlgme --version
