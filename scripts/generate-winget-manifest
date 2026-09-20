@@ -1,0 +1,138 @@
+#!/usr/bin/env bash
+
+set -euo pipefail
+
+package_identifier='BetterTomorrowDev.TlgMe'
+repository='bettertomorrow-dev/tlgme'
+schema_version='1.12.0'
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/generate-winget-manifest VERSION [OUTPUT_DIRECTORY]
+
+Generate a WinGet multi-file manifest for a published TlgMe GitHub Release.
+VERSION may be written as 0.1.3 or v0.1.3. OUTPUT_DIRECTORY defaults to the
+current directory. The script creates manifests/b/BetterTomorrowDev/TlgMe/
+VERSION inside that directory.
+EOF
+}
+
+if [[ "${1:-}" == '--help' || "${1:-}" == '-h' ]]; then
+  usage
+  exit 0
+fi
+
+if [[ $# -lt 1 || $# -gt 2 ]]; then
+  usage >&2
+  exit 2
+fi
+
+version="${1#v}"
+output_directory="${2:-.}"
+
+if [[ ! "$version" =~ ^[0-9]+(\.[0-9]+){1,2}([-.][0-9A-Za-z.-]+)?$ ]]; then
+  printf 'invalid version: %s\n' "$1" >&2
+  exit 2
+fi
+
+tag="v$version"
+release_url="https://github.com/$repository/releases/download/$tag"
+api_url="https://api.github.com/repos/$repository/releases/tags/$tag"
+manifest_directory="$output_directory/manifests/b/BetterTomorrowDev/TlgMe/$version"
+temporary_directory="$(mktemp -d)"
+trap 'rm -rf "$temporary_directory"' EXIT
+
+if [[ -e "$manifest_directory" ]]; then
+  printf 'refusing to overwrite existing manifest directory: %s\n' "$manifest_directory" >&2
+  exit 1
+fi
+
+release_metadata="$temporary_directory/release.json"
+checksums="$temporary_directory/checksums.txt"
+
+curl --fail --location --silent --show-error "$api_url" --output "$release_metadata"
+if ! grep -Eq "\"tag_name\"[[:space:]]*:[[:space:]]*\"$tag\"" "$release_metadata"; then
+  printf 'release metadata did not contain tag %s\n' "$tag" >&2
+  exit 1
+fi
+
+curl --fail --location --silent --show-error "$release_url/checksums.txt" --output "$checksums"
+
+checksum_for() {
+  local asset="$1"
+  local checksum
+
+  checksum="$(awk -v asset="$asset" '$2 == asset || $2 == "*" asset { print $1; exit }' "$checksums")"
+  if [[ ! "$checksum" =~ ^[0-9A-Fa-f]{64}$ ]]; then
+    printf 'missing or invalid SHA-256 checksum for %s\n' "$asset" >&2
+    exit 1
+  fi
+
+  printf '%s\n' "$checksum" | tr '[:lower:]' '[:upper:]'
+}
+
+amd64_asset="tlgme_${version}_windows_amd64.zip"
+arm64_asset="tlgme_${version}_windows_arm64.zip"
+amd64_checksum="$(checksum_for "$amd64_asset")"
+arm64_checksum="$(checksum_for "$arm64_asset")"
+
+for asset in "$amd64_asset" "$arm64_asset"; do
+  if ! grep -Fq "\"name\": \"$asset\"" "$release_metadata"; then
+    printf 'release %s does not contain %s\n' "$tag" "$asset" >&2
+    exit 1
+  fi
+done
+
+mkdir -p "$manifest_directory"
+
+cat > "$manifest_directory/$package_identifier.yaml" <<EOF
+# yaml-language-server: \$schema=https://aka.ms/winget-manifest.version.$schema_version.schema.json
+PackageIdentifier: $package_identifier
+PackageVersion: $version
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: $schema_version
+EOF
+
+cat > "$manifest_directory/$package_identifier.locale.en-US.yaml" <<EOF
+# yaml-language-server: \$schema=https://aka.ms/winget-manifest.defaultLocale.$schema_version.schema.json
+PackageIdentifier: $package_identifier
+PackageVersion: $version
+PackageLocale: en-US
+Publisher: BetterTomorrow Dev
+PublisherUrl: https://github.com/bettertomorrow-dev
+PublisherSupportUrl: https://github.com/bettertomorrow-dev/tlgme/issues
+PackageName: TlgMe
+PackageUrl: https://github.com/bettertomorrow-dev/tlgme
+License: MIT
+LicenseUrl: https://github.com/bettertomorrow-dev/tlgme/blob/main/LICENSE
+ShortDescription: Send Telegram messages and wait for replies from the command line.
+Tags:
+  - cli
+  - notification
+  - telegram
+ManifestType: defaultLocale
+ManifestVersion: $schema_version
+EOF
+
+cat > "$manifest_directory/$package_identifier.installer.yaml" <<EOF
+# yaml-language-server: \$schema=https://aka.ms/winget-manifest.installer.$schema_version.schema.json
+PackageIdentifier: $package_identifier
+PackageVersion: $version
+InstallerType: zip
+NestedInstallerType: portable
+NestedInstallerFiles:
+  - RelativeFilePath: tlgme.exe
+    PortableCommandAlias: tlgme
+Installers:
+  - Architecture: x64
+    InstallerUrl: $release_url/$amd64_asset
+    InstallerSha256: $amd64_checksum
+  - Architecture: arm64
+    InstallerUrl: $release_url/$arm64_asset
+    InstallerSha256: $arm64_checksum
+ManifestType: installer
+ManifestVersion: $schema_version
+EOF
+
+printf 'generated WinGet manifest: %s\n' "$manifest_directory"
