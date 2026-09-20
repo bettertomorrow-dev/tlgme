@@ -1,7 +1,4 @@
-# Release setup
-
-Every successful merge to `main` creates a release. Complete this setup before
-merging the release workflow for the first time.
+# Publishing releases
 
 ## GitHub repositories
 
@@ -15,7 +12,7 @@ repository under **Settings → Secrets and variables → Actions** as
 
 The release workflow uses the repository's `GITHUB_TOKEN` to create tags and
 GitHub Releases. Make sure organization policy allows workflows to request
-`contents: write`.
+`actions: read` and `contents: write`.
 
 ## Merge and tag rules
 
@@ -29,13 +26,29 @@ merge commits and rebase merging. Add a branch rule for `main` that:
 Add a tag ruleset for `v*` that prevents updates and deletion. Allow the
 release workflow to create new tags.
 
-These settings matter because the patch number is the number of first-parent
-commits since `VERSION` last changed. With squash merging, one merged pull
-request adds one patch release.
+## Publish a release
 
-## First release
+1. Wait for CI to pass on `main`.
+2. Open the [Release workflow](https://github.com/bettertomorrow-dev/tlgme/actions/workflows/release.yml).
+3. Select **Run workflow**.
+4. Check that the workflow created the GitHub Release and updated the Homebrew cask.
 
-Check the release configuration locally:
+The workflow always publishes the current tip of `main`. It refuses to run if
+CI for that commit has not passed. A repeat run for an already tagged current
+commit retries publication with the same tag.
+
+## Start a new major or minor version
+
+The root [`VERSION`](../VERSION) file contains `X.Y`. Change it in a pull
+request, merge the pull request, wait for CI, then publish through the Release
+workflow. The first release for a new `X.Y` is `vX.Y.0`.
+
+For example, changing `VERSION` from `0.1` to `0.2` makes the next manual
+release `v0.2.0`.
+
+## Verify the release
+
+Before changing release infrastructure, check it locally:
 
 ```bash
 go test -race ./...
@@ -43,9 +56,7 @@ goreleaser check
 goreleaser release --snapshot --clean
 ```
 
-The snapshot should contain six archives and `checksums.txt`. After the setup
-pull request is squash-merged and CI passes, the release workflow creates
-`v0.1.0`, publishes the GitHub Release, and writes `Casks/tlgme.rb` to the tap.
+The snapshot should contain six archives and `checksums.txt`.
 
 The CLI updater depends on these asset names remaining stable:
 
@@ -71,6 +82,5 @@ brew install --cask bettertomorrow-dev/tap/tlgme
 tlgme --version
 ```
 
-Use the Release workflow's manual trigger with the original commit SHA if a
-temporary GitHub or Homebrew failure needs a retry. Never move an existing
-release tag. Publish a new patch release for application or build defects.
+Never move an existing release tag. Publish a new patch release for application
+or build defects.

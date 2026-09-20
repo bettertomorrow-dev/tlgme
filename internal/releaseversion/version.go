@@ -11,8 +11,8 @@ import (
 
 var basePattern = regexp.MustCompile(`^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$`)
 
-// Calculate returns vX.Y.Z for revision. X.Y comes from VERSION and Z is the
-// first-parent distance from the commit that last changed VERSION.
+// Calculate returns vX.Y.Z for revision. X.Y comes from VERSION. Z increments
+// from the latest reachable release tag with the same X.Y version.
 func Calculate(repo, revision string) (string, error) {
 	commit, err := git(repo, "rev-parse", revision+"^{commit}")
 	if err != nil {
@@ -28,24 +28,43 @@ func Calculate(repo, revision string) (string, error) {
 		return "", fmt.Errorf("VERSION must contain X.Y, got %q", base)
 	}
 
-	start, err := git(repo, "log", "--first-parent", "--format=%H", "-n", "1", commit, "--", "VERSION")
+	tags, err := git(repo, "tag", "--merged", commit)
 	if err != nil {
-		return "", fmt.Errorf("find start of version %s: %w", base, err)
+		return "", fmt.Errorf("list release tags for %s: %w", commit, err)
 	}
-	if start == "" {
-		return "", fmt.Errorf("VERSION has no history at %s", commit)
+	pattern := regexp.MustCompile(`^v` + regexp.QuoteMeta(base) + `\.(0|[1-9][0-9]*)$`)
+	current := -1
+	currentTag := ""
+	latest := -1
+	for _, tag := range strings.Fields(tags) {
+		match := pattern.FindStringSubmatch(tag)
+		if match == nil {
+			continue
+		}
+		patch, err := strconv.Atoi(match[1])
+		if err != nil {
+			return "", fmt.Errorf("parse patch number in tag %q: %w", tag, err)
+		}
+		tagCommit, err := git(repo, "rev-parse", tag+"^{commit}")
+		if err != nil {
+			return "", fmt.Errorf("resolve release tag %q: %w", tag, err)
+		}
+		if tagCommit == commit {
+			if patch > current {
+				current = patch
+				currentTag = tag
+			}
+			continue
+		}
+		if patch > latest {
+			latest = patch
+		}
+	}
+	if currentTag != "" {
+		return currentTag, nil
 	}
 
-	rawPatch, err := git(repo, "rev-list", "--first-parent", "--count", start+".."+commit)
-	if err != nil {
-		return "", fmt.Errorf("count releases since %s: %w", start, err)
-	}
-	patch, err := strconv.Atoi(rawPatch)
-	if err != nil {
-		return "", fmt.Errorf("parse patch number %q: %w", rawPatch, err)
-	}
-
-	return fmt.Sprintf("v%s.%d", base, patch), nil
+	return fmt.Sprintf("v%s.%d", base, latest+1), nil
 }
 
 func git(repo string, args ...string) (string, error) {
