@@ -13,6 +13,7 @@ func TestCalculate(t *testing.T) {
 	writeFile(t, repo, "VERSION", "0.1\n")
 	commit(t, repo, "start 0.1")
 	assertVersion(t, repo, "v0.1.0")
+	tag(t, repo, "v0.1.0")
 
 	writeFile(t, repo, "one.txt", "one\n")
 	commit(t, repo, "first change")
@@ -20,7 +21,14 @@ func TestCalculate(t *testing.T) {
 
 	writeFile(t, repo, "two.txt", "two\n")
 	commit(t, repo, "second change")
+	assertVersion(t, repo, "v0.1.1")
+	tag(t, repo, "v0.1.1")
+	assertVersion(t, repo, "v0.1.1")
+
+	writeFile(t, repo, "three.txt", "three\n")
+	commit(t, repo, "third change")
 	assertVersion(t, repo, "v0.1.2")
+	tag(t, repo, "v0.1.2")
 
 	writeFile(t, repo, "VERSION", "0.2\n")
 	commit(t, repo, "start 0.2")
@@ -71,6 +79,11 @@ func commit(t *testing.T, repo, message string) {
 	t.Helper()
 	runGit(t, repo, "add", ".")
 	runGit(t, repo, "commit", "-m", message)
+}
+
+func tag(t *testing.T, repo, name string) {
+	t.Helper()
+	runGit(t, repo, "tag", "-a", name, "-m", name)
 }
 
 func runGit(t *testing.T, repo string, args ...string) {

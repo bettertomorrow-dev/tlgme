@@ -1,48 +1,46 @@
 name: Release
 
 on:
-  workflow_run:
-    workflows:
-      - CI
-    types:
-      - completed
   workflow_dispatch:
-    inputs:
-      revision:
-        description: Commit SHA whose failed publication should be retried
-        required: true
 
 permissions:
+  actions: read
   contents: write
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
 
 jobs:
   release:
-    if: >-
-      github.event_name == 'workflow_dispatch' ||
-      (github.event.workflow_run.conclusion == 'success' &&
-      github.event.workflow_run.event == 'push' &&
-      github.event.workflow_run.head_branch == 'main')
     runs-on: ubuntu-latest
     steps:
-      - name: Select revision
-        id: revision
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          WORKFLOW_REVISION: ${{ github.event.workflow_run.head_sha }}
-          MANUAL_REVISION: ${{ inputs.revision }}
-        run: |
-          if [ "$EVENT_NAME" = "workflow_run" ]; then
-            revision="$WORKFLOW_REVISION"
-          else
-            revision="$MANUAL_REVISION"
-          fi
-          printf 'revision=%s\n' "$revision" >> "$GITHUB_OUTPUT"
-
-      - name: Check out tested commit
+      - name: Check out main
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-          ref: ${{ steps.revision.outputs.revision }}
+          ref: main
+
+      - name: Select tested main revision
+        id: revision
+        run: |
+          git fetch --force --tags origin main
+          sha="$(git rev-parse origin/main)"
+          git checkout --detach "$sha"
+          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
+
+      - name: Verify CI passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SHA: ${{ steps.revision.outputs.sha }}
+        run: |
+          conclusion="$(gh api \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${SHA}&branch=main&event=push&per_page=1" \
+            --jq '.workflow_runs[0].conclusion // empty')"
+          if [ "$conclusion" != "success" ]; then
+            printf 'CI for %s has not completed successfully.\n' "$SHA" >&2
+            exit 1
+          fi
 
       - name: Set up Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
@@ -53,14 +51,9 @@ jobs:
       - name: Calculate release version
         id: version
         env:
-          REVISION: ${{ steps.revision.outputs.revision }}
+          REVISION: ${{ steps.revision.outputs.sha }}
         run: |
           sha="$(git rev-parse "$REVISION^{commit}")"
-          git fetch origin main
-          if ! git merge-base --is-ancestor "$sha" origin/main; then
-            printf 'Commit %s is not part of main.\n' "$sha" >&2
-            exit 1
-          fi
           tag="$(go run ./internal/releaseversion/cmd -revision "$sha")"
           printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
           printf 'tag=%s\n' "$tag" >> "$GITHUB_OUTPUT"

@@ -227,23 +227,3 @@ This repository ships the [`tlg` skill](skills/tlg/SKILL.md), which teaches
 agents to send a one-line completion ping and ask questions through `tlgme`.
 Install it from
 [skills/tlg](https://github.com/bettertomorrow-dev/tlgme/tree/main/skills/tlg).
-
-## Releases
-
-Every merge to `main` is released after CI passes. `VERSION` contains the
-major and minor version. The release workflow calculates the patch number from
-the first-parent history, creates the Git tag and GitHub Release, and updates
-the Homebrew cask. Changing `VERSION` from `0.1` to `0.2` makes that merge the
-`v0.2.0` release.
-
-Before merging a release-system change, test the package locally with:
-
-```bash
-goreleaser release --snapshot --clean
-```
-
-The `bettertomorrow-dev/homebrew-tap` repository must exist, and this
-repository must have an Actions secret named `TAP_GITHUB_TOKEN`. The token
-needs Contents read/write access to the tap repository. Use the Release
-workflow's manual trigger to retry a failed publication for a specific commit.
-See [Release setup](docs/releases.md) for the one-time GitHub configuration.
