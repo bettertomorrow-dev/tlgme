@@ -33,6 +33,21 @@ func TestRunSendsMessageToEnvironmentChat(t *testing.T) {
 	}
 }
 
+func TestRunSendsSilentMessage(t *testing.T) {
+	var got outgoing
+	app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
+	app.send = func(_ context.Context, _ string, _ any, message outgoing) (int, error) {
+		got = message
+		return 1, nil
+	}
+	if err := app.run(context.Background(), []string{"--text", "quiet", "--silent"}); err != nil {
+		t.Fatal(err)
+	}
+	if !got.silent {
+		t.Fatalf("message=%#v, want silent", got)
+	}
+}
+
 func TestRunUsesSavedChat(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	if err := saveConfig(path, config{ChatID: &chatTarget{value: int64(456)}}); err != nil {
@@ -142,6 +157,21 @@ func TestRunLearnSavesChatAndConfirms(t *testing.T) {
 	}
 	if runtime.GOOS != "windows" && info.Mode().Perm() != 0o600 {
 		t.Fatalf("got config permissions %o", info.Mode().Perm())
+	}
+}
+
+func TestConfirmConnectionIsAudible(t *testing.T) {
+	var got outgoing
+	app := testApplication(map[string]string{botTokenEnv: "secret"})
+	app.send = func(_ context.Context, _ string, _ any, message outgoing) (int, error) {
+		got = message
+		return 1, nil
+	}
+	if err := app.confirmConnection(context.Background(), "secret", &chatTarget{value: int64(42)}); err != nil {
+		t.Fatal(err)
+	}
+	if got.text != testMessageText || got.silent {
+		t.Fatalf("confirmation message=%#v, want audible", got)
 	}
 }
 
@@ -289,7 +319,7 @@ func testApplication(env map[string]string) application {
 		send: func(context.Context, string, any, outgoing) (int, error) {
 			return 0, errors.New("unexpected send")
 		},
-		awaitAnswer: func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+		awaitAnswer: func(context.Context, string, int64, int, []string, time.Time, bool) (promptAnswer, error) {
 			return promptAnswer{}, errors.New("unexpected awaitAnswer")
 		},
 		answerCallback: func(context.Context, string, string) error {

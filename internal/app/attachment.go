@@ -28,10 +28,11 @@ type outgoing struct {
 	asDocument bool
 	fallback   bool
 	buttons    []string
+	silent     bool
 }
 
 func (opts cliOptions) outgoing(stdin io.Reader) (outgoing, error) {
-	message := outgoing{text: opts.text.value, buttons: opts.buttons}
+	message := outgoing{text: opts.text.value, buttons: opts.buttons, silent: opts.silent}
 	source := opts.image
 	if opts.file.set {
 		source = opts.file

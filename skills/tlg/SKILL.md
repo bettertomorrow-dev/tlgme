@@ -37,6 +37,23 @@ tlgme --text "your message here"
 Run `tlgme` without arguments for first-time setup. Full setup and override
 instructions: [tlgme README](https://github.com/bettertomorrow-dev/tlgme#readme).
 
+## Quiet delivery
+
+Use `--silent` when the user asks for a quiet, silent, or no-sound Telegram
+notification. It suppresses the Telegram notification sound for that command.
+Leave it out for the normal audible completion ping.
+
+```bash
+tlgme --text "Done: nightly build passed" --silent
+```
+
+For a quiet question, add it to the prompt command. The question, any
+check-in, and the timeout notice all stay silent.
+
+```bash
+answer=$(tlgme --text "Deploy tonight?" --prompt --silent --button Yes --button No)
+```
+
 ## Attaching an image or a file
 
 An attachment replaces the normal completion ping. Do not send a second

@@ -45,3 +45,24 @@ func TestInlineKeyboard(t *testing.T) {
 		t.Fatalf("first button %#v", m.InlineKeyboard[0][0])
 	}
 }
+
+func TestSendParamsNotificationDefaults(t *testing.T) {
+	attachment := &attachment{file: &models.InputFileString{Data: "https://example.com/file"}}
+	for name, silent := range map[string]bool{"audible": false, "silent": true} {
+		t.Run(name, func(t *testing.T) {
+			message := outgoing{text: "hello", attachment: attachment, silent: silent}
+			textParams := newSendMessageParams(int64(42), message)
+			if textParams.DisableNotification != silent {
+				t.Fatalf("text DisableNotification=%v, want %v", textParams.DisableNotification, silent)
+			}
+			photoParams := newSendPhotoParams(int64(42), message)
+			if photoParams.DisableNotification != silent {
+				t.Fatalf("photo DisableNotification=%v, want %v", photoParams.DisableNotification, silent)
+			}
+			documentParams := newSendDocumentParams(int64(42), message)
+			if documentParams.DisableNotification != silent {
+				t.Fatalf("document DisableNotification=%v, want %v", documentParams.DisableNotification, silent)
+			}
+		})
+	}
+}
