@@ -23,13 +23,13 @@ type promptAnswer struct {
 func (app application) runPrompt(ctx context.Context, token string, chatID any, message outgoing) error {
 	numericChatID, ok := chatID.(int64)
 	if !ok {
-		return errors.New("--prompt requires a private/group chat, not a channel username")
+		return inputError(errors.New("--prompt requires a private/group chat, not a channel username"))
 	}
 
 	sentAt := app.now()
 	msgID, err := app.send(ctx, token, chatID, message)
 	if err != nil {
-		return fmt.Errorf("send prompt: %w", err)
+		return externalError(fmt.Errorf("send prompt: %w", err))
 	}
 
 	ans, err := app.awaitAnswer(ctx, token, numericChatID, msgID, message.buttons, sentAt, message.silent)
@@ -44,7 +44,10 @@ func (app application) runPrompt(ctx context.Context, token string, chatID any, 
 				app.warn("failed to send timeout notice", sendErr)
 			}
 		}
-		return err
+		if errors.Is(err, errPromptTimeout) || errors.Is(err, context.Canceled) {
+			return err
+		}
+		return externalError(err)
 	}
 
 	if ans.callbackID != "" {

@@ -23,6 +23,18 @@ import (
 	"github.com/minio/selfupdate"
 )
 
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+type failingReadCloser struct{ err error }
+
+func (r failingReadCloser) Read([]byte) (int, error) { return 0, r.err }
+
+func (failingReadCloser) Close() error { return nil }
+
 func TestParseSemanticVersion(t *testing.T) {
 	for _, value := range []string{"1", "1.2", "1.2.3.4", "1.02.3", "v1.2.3-beta", "dev"} {
 		if _, err := parseSemanticVersion(value); err == nil {
@@ -72,6 +84,57 @@ func TestFetchReleaseRejectsPrerelease(t *testing.T) {
 	defer server.Close()
 	if _, err := fetchRelease(context.Background(), server.Client(), server.URL); err == nil {
 		t.Fatal("prerelease was accepted")
+	}
+}
+
+func TestFetchReleaseExitClassification(t *testing.T) {
+	t.Run("HTTP status is external", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}))
+		defer server.Close()
+
+		_, err := fetchRelease(context.Background(), server.Client(), server.URL)
+		code, _ := exitResult(err)
+		if code != exitExternal {
+			t.Fatalf("error %v mapped to %d, want %d", err, code, exitExternal)
+		}
+	})
+
+	t.Run("malformed metadata is local", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("not json"))
+		}))
+		defer server.Close()
+
+		_, err := fetchRelease(context.Background(), server.Client(), server.URL)
+		code, _ := exitResult(err)
+		if code != exitUnexpected {
+			t.Fatalf("error %v mapped to %d, want %d", err, code, exitUnexpected)
+		}
+	})
+}
+
+func TestDownloadReadFailureIsExternal(t *testing.T) {
+	readErr := errors.New("connection reset while reading")
+	installer := newReleaseInstaller(io.Discard, io.Discard)
+	installer.client = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode:    http.StatusOK,
+			Status:        "200 OK",
+			Body:          failingReadCloser{err: readErr},
+			ContentLength: -1,
+			Header:        make(http.Header),
+		}, nil
+	})}
+
+	_, err := installer.download(context.Background(), releaseAsset{DownloadURL: "https://example.test/tlgme.tar.gz"})
+	if !errors.Is(err, readErr) {
+		t.Fatalf("error %v does not wrap %v", err, readErr)
+	}
+	code, _ := exitResult(err)
+	if code != exitExternal {
+		t.Fatalf("error %v mapped to %d, want %d", err, code, exitExternal)
 	}
 }
 

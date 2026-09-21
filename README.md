@@ -82,10 +82,9 @@ for zsh, bash, or fish. It never edits shell files.
 The wizard needs an interactive terminal to read a missing token. For scripts,
 provide `TG_BOT_TOKEN`, `--token`, or save it first with `--set-token`.
 
-Commands that need settings (`--text`, `--prompt`, `--learn`) print
-`not configured: missing <what>` to stdout and exit 1 when a required value
-is unavailable from flags, environment, or saved config. Scripts and agents
-can react to that line instead of parsing stderr.
+Commands that need settings (`--text`, `--prompt`, `--learn`) write
+`tlgme: not configured: missing <what>` to stderr and exit 3 when a required
+value is unavailable from flags, environment, or saved config.
 
 ## Send a message
 
@@ -120,6 +119,22 @@ stdin and base64 payloads; paths and URLs supply a name automatically.
 `--text` is the attachment caption and is limited to 1024 characters. If an
 `--image` upload is over 10 MB or is not an image, the command warns and sends
 it as a file instead. Uploads have a 60-second timeout.
+
+## Validate a send without sending it
+
+Add `--dry-run` to a message, image, or file command to resolve settings and
+the outgoing payload without contacting Telegram:
+
+```bash
+tlgme --text "Chart regenerated" --image /tmp/chart.png --dry-run
+```
+
+It prints the resolved target, message or caption length, attachment type,
+filename, byte size, prompt state, and button count. It reads local files,
+base64 data, data URIs, and stdin as usual. URL attachments are not downloaded
+and report `byte-size: unknown`. Dry runs require both configured settings,
+never print the bot token, skip the background update check, and do not write
+configuration or update-cache files.
 
 ## Ask for a reply
 
@@ -167,6 +182,20 @@ behavior.
 
 Prompt mode requires a numeric private or group chat ID. Channel usernames are
 valid send targets but cannot receive prompts.
+
+## Exit codes
+
+`tlgme` uses stable process exit codes for scripts and agents:
+
+| Code | Meaning |
+| ---: | --- |
+| 0 | The command completed successfully. |
+| 1 | A local or internal failure occurred. |
+| 2 | The command arguments or input payload are invalid. |
+| 3 | A required bot token or chat ID is missing. |
+| 4 | A prompt timed out waiting for an answer. |
+| 5 | Telegram, GitHub Releases, or another external service failed. |
+| 130 | The command was interrupted with Ctrl+C, SIGTERM, or context cancellation. |
 
 ## Override or replace settings
 

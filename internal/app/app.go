@@ -76,6 +76,28 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		stderr = io.Discard
 	}
 	redactions := []string{os.Getenv(botTokenEnv)}
+	app := newApplication(stdin, stdout, stderr, &redactions)
+
+	err := app.run(ctx, args)
+	if ctx.Err() != nil {
+		if err == nil {
+			err = ctx.Err()
+		} else {
+			err = fmt.Errorf("%w: %v", ctx.Err(), err)
+		}
+	}
+	if err != nil {
+		code, quiet := exitResult(err)
+		if quiet {
+			return code
+		}
+		fmt.Fprintf(stderr, "tlgme: %s\n", redactAll(err.Error(), redactions))
+		return code
+	}
+	return 0
+}
+
+var newApplication = func(stdin io.Reader, stdout, stderr io.Writer, redactions *[]string) application {
 	app := application{
 		getenv:          os.Getenv,
 		stdin:           stdin,
@@ -93,27 +115,18 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		removeKeyboard:  removeInlineKeyboard,
 		appendAnswer:    appendAnswer,
 		react:           react,
-		redactions:      &redactions,
+		redactions:      redactions,
 		updateCachePath: defaultUpdateCachePath,
 		latestRelease:   fetchLatestRelease,
 	}
 	app.installRelease = newReleaseInstaller(stdout, stderr).install
-
-	if err := app.run(ctx, args); err != nil {
-		var silent silentExitError
-		if errors.As(err, &silent) {
-			return silent.code
-		}
-		fmt.Fprintf(stderr, "tlgme: %s\n", redactAll(err.Error(), redactions))
-		return 1
-	}
-	return 0
+	return app
 }
 
 func (app application) run(ctx context.Context, args []string) error {
 	opts, err := parseCLI(args)
 	if err != nil {
-		return err
+		return inputError(err)
 	}
 	app.rememberSecret(opts.token.value)
 	app.rememberSecret(opts.setToken.value)
@@ -125,7 +138,9 @@ func (app application) run(ctx context.Context, args []string) error {
 	if opts.update {
 		return app.runUpdate(ctx)
 	}
-	defer app.notifyUpdate(ctx)
+	if !opts.dryRun {
+		defer app.notifyUpdate(ctx)
+	}
 	if opts.version {
 		app.printVersion()
 		return nil
@@ -147,7 +162,7 @@ func (app application) run(ctx context.Context, args []string) error {
 
 	resolved, err := app.resolveSettings(cfg, opts)
 	if err != nil {
-		return err
+		return inputError(err)
 	}
 
 	if opts.learn {
@@ -156,6 +171,16 @@ func (app application) run(ctx context.Context, args []string) error {
 		}
 		return app.runLearn(ctx, path, cfg, resolved.token)
 	}
+	if opts.dryRun {
+		if missing := missingSettings(resolved); len(missing) > 0 {
+			return app.notConfigured(missing...)
+		}
+		message, err := opts.outgoing(app.stdin)
+		if err != nil {
+			return inputError(err)
+		}
+		return app.runDryRun(resolved.chatID, opts.prompt, message)
+	}
 
 	if opts.text.set || opts.image.set || opts.file.set {
 		if missing := missingSettings(resolved); len(missing) > 0 {
@@ -163,7 +188,7 @@ func (app application) run(ctx context.Context, args []string) error {
 		}
 		message, err := opts.outgoing(app.stdin)
 		if err != nil {
-			return err
+			return inputError(err)
 		}
 		if message.fallback {
 			fmt.Fprintln(app.stderr, "tlgme: --image sent as a file because Telegram photos must be images under 10 MB")
@@ -172,7 +197,7 @@ func (app application) run(ctx context.Context, args []string) error {
 			return app.runPrompt(ctx, resolved.token, resolved.chatID.value, message)
 		}
 		if _, err := app.send(ctx, resolved.token, resolved.chatID.value, message); err != nil {
-			return fmt.Errorf("send message: %w", err)
+			return externalError(fmt.Errorf("send message: %w", err))
 		}
 		return nil
 	}
@@ -194,25 +219,25 @@ func (app application) runSetup(ctx context.Context, path string, cfg config, re
 	final, err := program.Run()
 	if err != nil {
 		if errors.Is(err, tea.ErrProgramKilled) || ctx.Err() != nil {
-			return silentExitError{code: 130}
+			return quietExit(exitInterrupted)
 		}
 		return fmt.Errorf("run setup: %w", err)
 	}
 	if w, ok := final.(wizard); ok && w.exit != 0 {
-		return silentExitError{code: w.exit}
+		return quietExit(w.exit)
 	}
 	return nil
 }
 
 func (app application) runLearn(ctx context.Context, path string, cfg config, token string) error {
 	if _, err := app.validateToken(ctx, token); err != nil {
-		return fmt.Errorf("validate bot token: %w", err)
+		return externalError(fmt.Errorf("validate bot token: %w", err))
 	}
 	fmt.Fprintln(app.stdout, "Send /start to the bot in a private chat. Waiting...")
 
 	chatID, err := app.learn(ctx, token, app.now())
 	if err != nil {
-		return fmt.Errorf("learn chat ID: %w", err)
+		return externalError(fmt.Errorf("learn chat ID: %w", err))
 	}
 
 	cfg.ChatID = &chatTarget{value: chatID}
@@ -224,7 +249,7 @@ func (app application) runLearn(ctx context.Context, path string, cfg config, to
 
 func (app application) confirmConnection(ctx context.Context, token string, chatID *chatTarget) error {
 	if _, err := app.send(ctx, token, chatID.value, outgoing{text: testMessageText}); err != nil {
-		return fmt.Errorf("chat ID was saved, but confirmation failed: %w", err)
+		return externalError(fmt.Errorf("chat ID was saved, but confirmation failed: %w", err))
 	}
 	fmt.Fprintf(app.stdout, "Connected to chat %v.\n", chatID.value)
 	return nil
