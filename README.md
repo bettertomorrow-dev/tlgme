@@ -118,6 +118,12 @@ stdin and base64 payloads; paths and URLs supply a name automatically.
 `--image` upload is over 10 MB or is not an image, the command warns and sends
 it as a file instead. Uploads have a 60-second timeout.
 
+TlgMe retries transient Telegram send failures twice by default. Use `--retry N` to
+choose the number of additional attempts, including `--retry 0` to send once.
+The wait between retries is 1, 2, 4, 8, 16, then 30 seconds, unless Telegram
+returns a `retry_after` value. A connection can fail after Telegram accepts a
+message, so retrying a transport failure may produce a duplicate message.
+
 ## Ask for a reply
 
 Add `--prompt` to send a question and wait for the answer:

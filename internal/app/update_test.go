@@ -135,7 +135,7 @@ func TestPromptAnswerStaysAloneOnStdout(t *testing.T) {
 	}
 	app.latestRelease = func(context.Context) (releaseInfo, error) { return testRelease("0.1.3"), nil }
 	app.send = func(context.Context, string, any, outgoing) (int, error) { return 7, nil }
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, int) (promptAnswer, error) {
 		return promptAnswer{text: "approved", replyMsgID: 8}, nil
 	}
 	app.react = func(context.Context, string, int64, int, string) error { return nil }

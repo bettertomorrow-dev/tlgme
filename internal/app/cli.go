@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 )
 
@@ -20,6 +21,23 @@ func (o *stringOption) Set(value string) error {
 }
 
 func (o *stringOption) String() string { return o.value }
+
+type intOption struct {
+	value int
+	set   bool
+}
+
+func (o *intOption) Set(value string) error {
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return err
+	}
+	o.value = parsed
+	o.set = true
+	return nil
+}
+
+func (o *intOption) String() string { return strconv.Itoa(o.value) }
 
 type stringList []string
 
@@ -40,6 +58,7 @@ type cliOptions struct {
 	setToken  stringOption
 	setChatID stringOption
 	buttons   stringList
+	retry     intOption
 	prompt    bool
 	learn     bool
 	help      bool
@@ -53,13 +72,14 @@ type settings struct {
 }
 
 func parseCLI(args []string) (cliOptions, error) {
-	var opts cliOptions
+	opts := cliOptions{retry: intOption{value: defaultRetryAttempts}}
 	flags := flag.NewFlagSet("tlgme", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	flags.Var(&opts.text, "text", "message or question text")
 	flags.Var(&opts.image, "image", "image URL, path, data URI, base64 data, or - for stdin")
 	flags.Var(&opts.file, "file", "file URL, path, data URI, base64 data, or - for stdin")
 	flags.Var(&opts.filename, "filename", "filename for a base64 or stdin attachment")
+	flags.Var(&opts.retry, "retry", "additional Telegram send attempts after a retryable failure")
 	flags.BoolVar(&opts.prompt, "prompt", false, "wait for a Telegram reply")
 	flags.Var(&opts.buttons, "button", "prompt button label; repeatable")
 	flags.Var(&opts.token, "token", "temporary bot token override")
@@ -76,7 +96,7 @@ func parseCLI(args []string) (cliOptions, error) {
 		return cliOptions{}, fmt.Errorf("%w\n\n%s", err, usageText)
 	}
 	if opts.help {
-		if opts.update {
+		if opts.update || opts.retry.set {
 			return cliOptions{}, errors.New("--update cannot be combined with other options")
 		}
 		return opts, nil
@@ -85,13 +105,13 @@ func parseCLI(args []string) (cliOptions, error) {
 		return cliOptions{}, fmt.Errorf("unexpected positional arguments: %s\n\n%s", strings.Join(flags.Args(), " "), usageText)
 	}
 	if opts.version {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.update {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.update || opts.retry.set {
 			return cliOptions{}, errors.New("--version cannot be combined with other options")
 		}
 		return opts, nil
 	}
 	if opts.update {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.retry.set {
 			return cliOptions{}, errors.New("--update cannot be combined with other options")
 		}
 		return opts, nil
@@ -99,7 +119,7 @@ func parseCLI(args []string) (cliOptions, error) {
 
 	setMode := opts.setToken.set || opts.setChatID.set
 	if setMode {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.retry.set {
 			return cliOptions{}, errors.New("--set-token and --set-chat-id cannot be combined with action or override flags")
 		}
 		if opts.setToken.set && strings.TrimSpace(opts.setToken.value) == "" {
@@ -114,7 +134,7 @@ func parseCLI(args []string) (cliOptions, error) {
 	}
 
 	if opts.learn {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.retry.set {
 			return cliOptions{}, errors.New("--learn cannot be combined with --text, --image, --file, --filename, --prompt, or --button")
 		}
 		if opts.chatID.set {
@@ -132,6 +152,12 @@ func parseCLI(args []string) (cliOptions, error) {
 	}
 	if opts.image.set && opts.file.set {
 		return cliOptions{}, errors.New("--image and --file cannot be combined")
+	}
+	if opts.retry.value < 0 {
+		return cliOptions{}, errors.New("--retry must be zero or greater")
+	}
+	if opts.retry.set && !opts.text.set && !opts.image.set && !opts.file.set {
+		return cliOptions{}, errors.New("--retry requires --text, --image, or --file")
 	}
 	if opts.filename.set && !opts.image.set && !opts.file.set {
 		return cliOptions{}, errors.New("--filename requires --image or --file")
@@ -164,6 +190,7 @@ Options:
   --image SOURCE     Send an inline image from a URL, path, data URI, base64 data, or stdin.
   --file SOURCE      Send a file from a URL, path, data URI, base64 data, or stdin.
   --filename NAME    Override an attachment filename.
+	  --retry N         Retry a Telegram send up to N additional times (default 2).
   --prompt           Wait for a text reply or button tap.
   --button LABEL     Add a prompt button. Repeat for more buttons.
   --token TOKEN      Override the bot token for this invocation.
