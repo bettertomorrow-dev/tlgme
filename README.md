@@ -1,6 +1,52 @@
 # TlgMe
 
-`tlgme` sends plain-text Telegram messages and can wait for replies.
+After setting up the bot, TlgMe lets automation send you a Telegram question
+and wait for a text reply or button tap. Capture the answer in your shell
+script; prompt answers are the only content written to stdout.
+
+For one-way notifications, see the [basic send example](#send-a-message). For
+image or file approvals, see the
+[attachment prompt example](#prompt-with-an-attachment).
+
+## Ask for a reply
+
+Add `--prompt` to send a question and wait for the answer:
+
+```bash
+answer=$(tlgme --text "Which environment should I deploy to?" --prompt \
+  --button Staging --button Production)
+```
+
+The command waits up to five minutes for a plain-text reply and prints the
+reply on stdout. The bot reacts with 👀 to the reply.
+
+Add preset answers with repeatable `--button` flags:
+
+```bash
+answer=$(tlgme --text "Proceed with deploy?" --prompt \
+  --button Yes --button No)
+```
+
+A button tap removes the buttons, appends `Answer: <label>` to the question,
+reacts with 👍, and prints the label on stdout. A text reply still works when
+buttons are present.
+
+### Prompt with an attachment
+
+An image or file can carry the question. Button answers update its caption:
+
+```bash
+answer=$(tlgme --text "Does this look right?" --image /tmp/preview.png \
+  --prompt --button Yes --button "Needs changes")
+```
+
+About 30 seconds before the deadline, the bot sends a check-in message. React
+to it with any emoji to add five minutes. This can repeat. On timeout, the bot
+removes the buttons, sends `Request timed out waiting for a reply.`, writes an
+error to stderr, and exits nonzero without writing to stdout.
+
+Prompt mode requires a numeric private or group chat ID. Channel usernames are
+valid send targets but cannot receive prompts.
 
 ## Install
 
@@ -117,43 +163,6 @@ stdin and base64 payloads; paths and URLs supply a name automatically.
 `--text` is the attachment caption and is limited to 1024 characters. If an
 `--image` upload is over 10 MB or is not an image, the command warns and sends
 it as a file instead. Uploads have a 60-second timeout.
-
-## Ask for a reply
-
-Add `--prompt` to send a question and wait for the answer:
-
-```bash
-answer=$(tlgme --text "Which environment should I deploy to?" --prompt)
-```
-
-The command waits up to five minutes for a plain-text reply and prints the
-reply on stdout. The bot reacts with 👀 to the reply.
-
-Add preset answers with repeatable `--button` flags:
-
-```bash
-answer=$(tlgme --text "Proceed with deploy?" --prompt \
-  --button Yes --button No)
-```
-
-A button tap removes the buttons, appends `Answer: <label>` to the question,
-reacts with 👍, and prints the label on stdout. A text reply still works when
-buttons are present.
-
-An image or file can carry the question. Button answers update its caption:
-
-```bash
-answer=$(tlgme --text "Does this look right?" --image /tmp/preview.png \
-  --prompt --button Yes --button "Needs changes")
-```
-
-About 30 seconds before the deadline, the bot sends a check-in message. React
-to it with any emoji to add five minutes. This can repeat. On timeout, the bot
-removes the buttons, sends `Request timed out waiting for a reply.`, writes an
-error to stderr, and exits nonzero without writing to stdout.
-
-Prompt mode requires a numeric private or group chat ID. Channel usernames are
-valid send targets but cannot receive prompts.
 
 ## Override or replace settings
 
