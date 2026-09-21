@@ -75,6 +75,34 @@ func TestFetchReleaseRejectsPrerelease(t *testing.T) {
 	}
 }
 
+func TestFetchReleaseExitClassification(t *testing.T) {
+	t.Run("HTTP status is external", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		}))
+		defer server.Close()
+
+		_, err := fetchRelease(context.Background(), server.Client(), server.URL)
+		code, _ := exitResult(err)
+		if code != exitExternal {
+			t.Fatalf("error %v mapped to %d, want %d", err, code, exitExternal)
+		}
+	})
+
+	t.Run("malformed metadata is local", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			_, _ = w.Write([]byte("not json"))
+		}))
+		defer server.Close()
+
+		_, err := fetchRelease(context.Background(), server.Client(), server.URL)
+		code, _ := exitResult(err)
+		if code != exitUnexpected {
+			t.Fatalf("error %v mapped to %d, want %d", err, code, exitUnexpected)
+		}
+	})
+}
+
 func TestUpdateNoticeRunsAfterSendAndUsesCache(t *testing.T) {
 	restoreVersion := setVersionForTest("0.1.2")
 	defer restoreVersion()

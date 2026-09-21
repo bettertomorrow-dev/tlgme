@@ -82,10 +82,9 @@ for zsh, bash, or fish. It never edits shell files.
 The wizard needs an interactive terminal to read a missing token. For scripts,
 provide `TG_BOT_TOKEN`, `--token`, or save it first with `--set-token`.
 
-Commands that need settings (`--text`, `--prompt`, `--learn`) print
-`not configured: missing <what>` to stdout and exit 1 when a required value
-is unavailable from flags, environment, or saved config. Scripts and agents
-can react to that line instead of parsing stderr.
+Commands that need settings (`--text`, `--prompt`, `--learn`) write
+`tlgme: not configured: missing <what>` to stderr and exit 3 when a required
+value is unavailable from flags, environment, or saved config.
 
 ## Send a message
 
@@ -167,6 +166,20 @@ behavior.
 
 Prompt mode requires a numeric private or group chat ID. Channel usernames are
 valid send targets but cannot receive prompts.
+
+## Exit codes
+
+`tlgme` uses stable process exit codes for scripts and agents:
+
+| Code | Meaning |
+| ---: | --- |
+| 0 | The command completed successfully. |
+| 1 | A local or internal failure occurred. |
+| 2 | The command arguments or input payload are invalid. |
+| 3 | A required bot token or chat ID is missing. |
+| 4 | A prompt timed out waiting for an answer. |
+| 5 | Telegram, GitHub Releases, or another external service failed. |
+| 130 | The command was interrupted with Ctrl+C, SIGTERM, or context cancellation. |
 
 ## Override or replace settings
 
