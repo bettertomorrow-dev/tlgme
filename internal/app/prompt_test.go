@@ -26,9 +26,12 @@ func TestRunPromptSendsQuestionAndReturnsReply(t *testing.T) {
 		promptQuestion, promptButtons = message.text, message.buttons
 		return 10, nil
 	}
-	app.awaitAnswer = func(_ context.Context, _ string, chatID int64, questionMsgID int, buttons []string, _ time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(_ context.Context, _ string, chatID int64, questionMsgID int, buttons []string, _ time.Time, timeout time.Duration) (promptAnswer, error) {
 		if chatID != 42 || questionMsgID != 10 || len(buttons) != 0 {
 			t.Fatalf("unexpected await chat=%d msg=%d buttons=%v", chatID, questionMsgID, buttons)
+		}
+		if timeout != promptTimeout {
+			t.Fatalf("unexpected timeout %s", timeout)
 		}
 		return promptAnswer{text: "user answer", replyMsgID: 99}, nil
 	}
@@ -66,7 +69,7 @@ func TestRunPromptWithButtonTap(t *testing.T) {
 		gotButtons = message.buttons
 		return 11, nil
 	}
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, time.Duration) (promptAnswer, error) {
 		return promptAnswer{text: "Yes", callbackID: "cb-1"}, nil
 	}
 	app.removeKeyboard = func(context.Context, string, int64, int) error {
@@ -122,7 +125,7 @@ func TestRunPromptWithAttachmentEditsCaption(t *testing.T) {
 		got = message
 		return 11, nil
 	}
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, time.Duration) (promptAnswer, error) {
 		return promptAnswer{text: "Yes", callbackID: "cb-1"}, nil
 	}
 	app.answerCallback = func(context.Context, string, string) error { return nil }
@@ -150,7 +153,7 @@ func TestRunPromptTextReplyWithButtonsRemovesKeyboard(t *testing.T) {
 	var appendCalled bool
 	app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
 	app.send = func(context.Context, string, any, outgoing) (int, error) { return 5, nil }
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, time.Duration) (promptAnswer, error) {
 		return promptAnswer{text: "custom", replyMsgID: 7}, nil
 	}
 	app.removeKeyboard = func(context.Context, string, int64, int) error {
@@ -192,7 +195,7 @@ func TestRunPromptTimesOutAndNotifiesChat(t *testing.T) {
 		sends = append(sends, message.text)
 		return 1, nil
 	}
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, time.Duration) (promptAnswer, error) {
 		return promptAnswer{}, errPromptTimeout
 	}
 	app.removeKeyboard = func(context.Context, string, int64, int) error {
@@ -213,7 +216,7 @@ func TestRunPromptTimesOutWithoutButtonsSkipsRemove(t *testing.T) {
 	var removeCalled bool
 	app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
 	app.send = func(context.Context, string, any, outgoing) (int, error) { return 1, nil }
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, time.Duration) (promptAnswer, error) {
 		return promptAnswer{}, errPromptTimeout
 	}
 	app.removeKeyboard = func(context.Context, string, int64, int) error {
@@ -251,7 +254,7 @@ func TestRunPromptReactFailureStillReturnsReply(t *testing.T) {
 	app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
 	app.stdout = &stdout
 	app.send = func(context.Context, string, any, outgoing) (int, error) { return 1, nil }
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, time.Duration) (promptAnswer, error) {
 		return promptAnswer{text: "ok", replyMsgID: 1}, nil
 	}
 	app.react = func(context.Context, string, int64, int, string) error {

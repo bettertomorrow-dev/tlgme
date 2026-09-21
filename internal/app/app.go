@@ -53,7 +53,7 @@ type application struct {
 	lookPath        func(string) (string, error)
 	learn           func(context.Context, string, time.Time) (int64, error)
 	send            func(context.Context, string, any, outgoing) (int, error)
-	awaitAnswer     func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error)
+	awaitAnswer     func(context.Context, string, int64, int, []string, time.Time, time.Duration) (promptAnswer, error)
 	answerCallback  func(context.Context, string, string) error
 	removeKeyboard  func(context.Context, string, int64, int) error
 	appendAnswer    func(context.Context, string, int64, int, string, bool) error
@@ -169,7 +169,7 @@ func (app application) run(ctx context.Context, args []string) error {
 			fmt.Fprintln(app.stderr, "tlgme: --image sent as a file because Telegram photos must be images under 10 MB")
 		}
 		if opts.prompt {
-			return app.runPrompt(ctx, resolved.token, resolved.chatID.value, message)
+			return app.runPrompt(ctx, resolved.token, resolved.chatID.value, message, opts.timeout)
 		}
 		if _, err := app.send(ctx, resolved.token, resolved.chatID.value, message); err != nil {
 			return fmt.Errorf("send message: %w", err)

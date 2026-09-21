@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 )
 
 type stringOption struct {
@@ -31,20 +32,22 @@ func (s *stringList) Set(value string) error {
 func (s *stringList) String() string { return strings.Join(*s, ",") }
 
 type cliOptions struct {
-	text      stringOption
-	image     stringOption
-	file      stringOption
-	filename  stringOption
-	token     stringOption
-	chatID    stringOption
-	setToken  stringOption
-	setChatID stringOption
-	buttons   stringList
-	prompt    bool
-	learn     bool
-	help      bool
-	version   bool
-	update    bool
+	text       stringOption
+	image      stringOption
+	file       stringOption
+	filename   stringOption
+	token      stringOption
+	chatID     stringOption
+	setToken   stringOption
+	setChatID  stringOption
+	buttons    stringList
+	prompt     bool
+	timeout    time.Duration
+	timeoutSet bool
+	learn      bool
+	help       bool
+	version    bool
+	update     bool
 }
 
 type settings struct {
@@ -61,6 +64,7 @@ func parseCLI(args []string) (cliOptions, error) {
 	flags.Var(&opts.file, "file", "file URL, path, data URI, base64 data, or - for stdin")
 	flags.Var(&opts.filename, "filename", "filename for a base64 or stdin attachment")
 	flags.BoolVar(&opts.prompt, "prompt", false, "wait for a Telegram reply")
+	flags.DurationVar(&opts.timeout, "timeout", promptTimeout, "maximum time to wait for a prompt reply")
 	flags.Var(&opts.buttons, "button", "prompt button label; repeatable")
 	flags.Var(&opts.token, "token", "temporary bot token override")
 	flags.Var(&opts.chatID, "chat-id", "temporary chat ID override")
@@ -75,9 +79,20 @@ func parseCLI(args []string) (cliOptions, error) {
 	if err := flags.Parse(args); err != nil {
 		return cliOptions{}, fmt.Errorf("%w\n\n%s", err, usageText)
 	}
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "timeout" {
+			opts.timeoutSet = true
+		}
+	})
+	if opts.timeoutSet && opts.timeout <= 0 {
+		return cliOptions{}, errors.New("--timeout must be greater than zero")
+	}
 	if opts.help {
 		if opts.update {
 			return cliOptions{}, errors.New("--update cannot be combined with other options")
+		}
+		if opts.timeoutSet && !opts.prompt {
+			return cliOptions{}, errors.New("--timeout requires --prompt")
 		}
 		return opts, nil
 	}
@@ -85,13 +100,13 @@ func parseCLI(args []string) (cliOptions, error) {
 		return cliOptions{}, fmt.Errorf("unexpected positional arguments: %s\n\n%s", strings.Join(flags.Args(), " "), usageText)
 	}
 	if opts.version {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.update {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.timeoutSet || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.update {
 			return cliOptions{}, errors.New("--version cannot be combined with other options")
 		}
 		return opts, nil
 	}
 	if opts.update {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.timeoutSet || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set {
 			return cliOptions{}, errors.New("--update cannot be combined with other options")
 		}
 		return opts, nil
@@ -99,7 +114,7 @@ func parseCLI(args []string) (cliOptions, error) {
 
 	setMode := opts.setToken.set || opts.setChatID.set
 	if setMode {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.timeoutSet || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set {
 			return cliOptions{}, errors.New("--set-token and --set-chat-id cannot be combined with action or override flags")
 		}
 		if opts.setToken.set && strings.TrimSpace(opts.setToken.value) == "" {
@@ -114,7 +129,7 @@ func parseCLI(args []string) (cliOptions, error) {
 	}
 
 	if opts.learn {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.timeoutSet || len(opts.buttons) > 0 {
 			return cliOptions{}, errors.New("--learn cannot be combined with --text, --image, --file, --filename, --prompt, or --button")
 		}
 		if opts.chatID.set {
@@ -138,6 +153,9 @@ func parseCLI(args []string) (cliOptions, error) {
 	}
 	if opts.prompt && !opts.text.set {
 		return cliOptions{}, errors.New("--prompt requires --text")
+	}
+	if opts.timeoutSet && !opts.prompt {
+		return cliOptions{}, errors.New("--timeout requires --prompt")
 	}
 	if len(opts.buttons) > 0 && !opts.prompt {
 		return cliOptions{}, errors.New("--button requires --prompt")
@@ -165,6 +183,7 @@ Options:
   --file SOURCE      Send a file from a URL, path, data URI, base64 data, or stdin.
   --filename NAME    Override an attachment filename.
   --prompt           Wait for a text reply or button tap.
+  --timeout DURATION Maximum time to wait for a prompt reply (default 5m).
   --button LABEL     Add a prompt button. Repeat for more buttons.
   --token TOKEN      Override the bot token for this invocation.
   --chat-id ID       Override the chat for this invocation.
