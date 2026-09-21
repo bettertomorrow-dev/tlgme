@@ -26,7 +26,7 @@ func TestRunPromptSendsQuestionAndReturnsReply(t *testing.T) {
 		promptQuestion, promptButtons = message.text, message.buttons
 		return 10, nil
 	}
-	app.awaitAnswer = func(_ context.Context, _ string, chatID int64, questionMsgID int, buttons []string, _ time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(_ context.Context, _ string, chatID int64, questionMsgID int, buttons []string, _ time.Time, _ bool) (promptAnswer, error) {
 		if chatID != 42 || questionMsgID != 10 || len(buttons) != 0 {
 			t.Fatalf("unexpected await chat=%d msg=%d buttons=%v", chatID, questionMsgID, buttons)
 		}
@@ -52,6 +52,31 @@ func TestRunPromptSendsQuestionAndReturnsReply(t *testing.T) {
 	}
 }
 
+func TestRunPromptPropagatesSilentToQuestionAndTimeout(t *testing.T) {
+	var question, timeout bool
+	var awaitSilent bool
+	app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
+	app.send = func(_ context.Context, _ string, _ any, message outgoing) (int, error) {
+		if message.text == timeoutText {
+			timeout = message.silent
+		} else {
+			question = message.silent
+		}
+		return 1, nil
+	}
+	app.awaitAnswer = func(_ context.Context, _ string, _ int64, _ int, _ []string, _ time.Time, silent bool) (promptAnswer, error) {
+		awaitSilent = silent
+		return promptAnswer{}, errPromptTimeout
+	}
+
+	if err := app.run(context.Background(), []string{"--text", "quiet?", "--prompt", "--silent"}); !errors.Is(err, errPromptTimeout) {
+		t.Fatalf("got %v", err)
+	}
+	if !question || !timeout || !awaitSilent {
+		t.Fatalf("question silent=%v timeout silent=%v await silent=%v", question, timeout, awaitSilent)
+	}
+}
+
 func TestRunPromptWithButtonTap(t *testing.T) {
 	var gotButtons []string
 	var removeCalled bool
@@ -66,7 +91,7 @@ func TestRunPromptWithButtonTap(t *testing.T) {
 		gotButtons = message.buttons
 		return 11, nil
 	}
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool) (promptAnswer, error) {
 		return promptAnswer{text: "Yes", callbackID: "cb-1"}, nil
 	}
 	app.removeKeyboard = func(context.Context, string, int64, int) error {
@@ -122,7 +147,7 @@ func TestRunPromptWithAttachmentEditsCaption(t *testing.T) {
 		got = message
 		return 11, nil
 	}
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool) (promptAnswer, error) {
 		return promptAnswer{text: "Yes", callbackID: "cb-1"}, nil
 	}
 	app.answerCallback = func(context.Context, string, string) error { return nil }
@@ -150,7 +175,7 @@ func TestRunPromptTextReplyWithButtonsRemovesKeyboard(t *testing.T) {
 	var appendCalled bool
 	app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
 	app.send = func(context.Context, string, any, outgoing) (int, error) { return 5, nil }
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool) (promptAnswer, error) {
 		return promptAnswer{text: "custom", replyMsgID: 7}, nil
 	}
 	app.removeKeyboard = func(context.Context, string, int64, int) error {
@@ -192,7 +217,7 @@ func TestRunPromptTimesOutAndNotifiesChat(t *testing.T) {
 		sends = append(sends, message.text)
 		return 1, nil
 	}
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool) (promptAnswer, error) {
 		return promptAnswer{}, errPromptTimeout
 	}
 	app.removeKeyboard = func(context.Context, string, int64, int) error {
@@ -213,7 +238,7 @@ func TestRunPromptTimesOutWithoutButtonsSkipsRemove(t *testing.T) {
 	var removeCalled bool
 	app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
 	app.send = func(context.Context, string, any, outgoing) (int, error) { return 1, nil }
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool) (promptAnswer, error) {
 		return promptAnswer{}, errPromptTimeout
 	}
 	app.removeKeyboard = func(context.Context, string, int64, int) error {
@@ -251,7 +276,7 @@ func TestRunPromptReactFailureStillReturnsReply(t *testing.T) {
 	app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
 	app.stdout = &stdout
 	app.send = func(context.Context, string, any, outgoing) (int, error) { return 1, nil }
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool) (promptAnswer, error) {
 		return promptAnswer{text: "ok", replyMsgID: 1}, nil
 	}
 	app.react = func(context.Context, string, int64, int, string) error {

@@ -92,9 +92,12 @@ can react to that line instead of parsing stderr.
 ```bash
 tlgme --text "The agent finished the task"
 tlgme --text "Tests passed on $HOST"
+tlgme --text "The agent finished the task" --silent
 ```
 
-Text must be passed with `--text`. Positional messages are not supported.
+Text must be passed with `--text`. Positional messages are not supported. Add
+`--silent` to suppress the Telegram notification sound. The setting applies to
+this send only and is not saved in the config.
 
 ## Send an image or file
 
@@ -147,10 +150,20 @@ answer=$(tlgme --text "Does this look right?" --image /tmp/preview.png \
   --prompt --button Yes --button "Needs changes")
 ```
 
+Prompt questions can also be sent silently:
+
+```bash
+answer=$(tlgme --text "Proceed with deploy?" --prompt --silent)
+```
+
 About 30 seconds before the deadline, the bot sends a check-in message. React
 to it with any emoji to add five minutes. This can repeat. On timeout, the bot
 removes the buttons, sends `Request timed out waiting for a reply.`, writes an
 error to stderr, and exits nonzero without writing to stdout.
+
+For a silent prompt, the check-in and timeout notice are silent as well.
+Callback acknowledgements, reactions, and message edits keep their normal
+behavior.
 
 Prompt mode requires a numeric private or group chat ID. Channel usernames are
 valid send targets but cannot receive prompts.

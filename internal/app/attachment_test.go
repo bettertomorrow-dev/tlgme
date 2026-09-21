@@ -55,10 +55,10 @@ func TestRunSendsAttachment(t *testing.T) {
 		got = message
 		return 1, nil
 	}
-	if err := app.run(context.Background(), []string{"--text", "chart", "--image", "data:image/png;base64,iVBORw0KGgo="}); err != nil {
+	if err := app.run(context.Background(), []string{"--text", "chart", "--image", "data:image/png;base64,iVBORw0KGgo=", "--silent"}); err != nil {
 		t.Fatal(err)
 	}
-	if got.attachment == nil || got.asDocument || got.text != "chart" {
+	if got.attachment == nil || got.asDocument || got.text != "chart" || !got.silent {
 		t.Fatalf("unexpected image outgoing: %#v", got)
 	}
 	if err := app.run(context.Background(), []string{"--file", "data:application/pdf;base64,JVBERi0="}); err != nil {

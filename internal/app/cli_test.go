@@ -15,6 +15,14 @@ func TestParseCLI(t *testing.T) {
 		t.Fatalf("got text=%q prompt=%v buttons=%v", opts.text.value, opts.prompt, opts.buttons)
 	}
 
+	opts, err = parseCLI([]string{"--text", "quiet", "--silent"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !opts.silent {
+		t.Fatal("silent flag was not set")
+	}
+
 	_, err = parseCLI([]string{"--text", "hello", "--button"})
 	if err == nil || !strings.Contains(err.Error(), "needs an argument") {
 		t.Fatalf("got %v", err)
@@ -24,6 +32,12 @@ func TestParseCLI(t *testing.T) {
 		{"--image", "a", "--file", "b"},
 		{"--filename", "report.pdf"},
 		{"--learn", "--file", "report.pdf"},
+		{"--silent"},
+		{"--silent", "--learn"},
+		{"--silent", "--set-token", "secret"},
+		{"--silent", "--version"},
+		{"--silent", "--update"},
+		{"--silent", "--help"},
 	} {
 		if _, err := parseCLI(args); err == nil {
 			t.Fatalf("expected validation error for %v", args)

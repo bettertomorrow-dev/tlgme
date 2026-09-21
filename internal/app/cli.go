@@ -41,6 +41,7 @@ type cliOptions struct {
 	setChatID stringOption
 	buttons   stringList
 	prompt    bool
+	silent    bool
 	learn     bool
 	help      bool
 	version   bool
@@ -61,6 +62,7 @@ func parseCLI(args []string) (cliOptions, error) {
 	flags.Var(&opts.file, "file", "file URL, path, data URI, base64 data, or - for stdin")
 	flags.Var(&opts.filename, "filename", "filename for a base64 or stdin attachment")
 	flags.BoolVar(&opts.prompt, "prompt", false, "wait for a Telegram reply")
+	flags.BoolVar(&opts.silent, "silent", false, "send without a notification sound")
 	flags.Var(&opts.buttons, "button", "prompt button label; repeatable")
 	flags.Var(&opts.token, "token", "temporary bot token override")
 	flags.Var(&opts.chatID, "chat-id", "temporary chat ID override")
@@ -79,19 +81,22 @@ func parseCLI(args []string) (cliOptions, error) {
 		if opts.update {
 			return cliOptions{}, errors.New("--update cannot be combined with other options")
 		}
+		if opts.silent {
+			return cliOptions{}, errors.New("--silent cannot be combined with --help")
+		}
 		return opts, nil
 	}
 	if flags.NArg() != 0 {
 		return cliOptions{}, fmt.Errorf("unexpected positional arguments: %s\n\n%s", strings.Join(flags.Args(), " "), usageText)
 	}
 	if opts.version {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.update {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.silent || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.update {
 			return cliOptions{}, errors.New("--version cannot be combined with other options")
 		}
 		return opts, nil
 	}
 	if opts.update {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.silent || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set {
 			return cliOptions{}, errors.New("--update cannot be combined with other options")
 		}
 		return opts, nil
@@ -99,7 +104,7 @@ func parseCLI(args []string) (cliOptions, error) {
 
 	setMode := opts.setToken.set || opts.setChatID.set
 	if setMode {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.silent || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set {
 			return cliOptions{}, errors.New("--set-token and --set-chat-id cannot be combined with action or override flags")
 		}
 		if opts.setToken.set && strings.TrimSpace(opts.setToken.value) == "" {
@@ -114,7 +119,7 @@ func parseCLI(args []string) (cliOptions, error) {
 	}
 
 	if opts.learn {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.silent || len(opts.buttons) > 0 {
 			return cliOptions{}, errors.New("--learn cannot be combined with --text, --image, --file, --filename, --prompt, or --button")
 		}
 		if opts.chatID.set {
@@ -138,6 +143,9 @@ func parseCLI(args []string) (cliOptions, error) {
 	}
 	if opts.prompt && !opts.text.set {
 		return cliOptions{}, errors.New("--prompt requires --text")
+	}
+	if opts.silent && !opts.text.set && !opts.image.set && !opts.file.set {
+		return cliOptions{}, errors.New("--silent requires --text, --image, or --file")
 	}
 	if len(opts.buttons) > 0 && !opts.prompt {
 		return cliOptions{}, errors.New("--button requires --prompt")
@@ -165,6 +173,7 @@ Options:
   --file SOURCE      Send a file from a URL, path, data URI, base64 data, or stdin.
   --filename NAME    Override an attachment filename.
   --prompt           Wait for a text reply or button tap.
+  --silent           Send without a notification sound.
   --button LABEL     Add a prompt button. Repeat for more buttons.
   --token TOKEN      Override the bot token for this invocation.
   --chat-id ID       Override the chat for this invocation.

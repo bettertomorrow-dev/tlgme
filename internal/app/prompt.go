@@ -32,7 +32,7 @@ func (app application) runPrompt(ctx context.Context, token string, chatID any, 
 		return fmt.Errorf("send prompt: %w", err)
 	}
 
-	ans, err := app.awaitAnswer(ctx, token, numericChatID, msgID, message.buttons, sentAt)
+	ans, err := app.awaitAnswer(ctx, token, numericChatID, msgID, message.buttons, sentAt, message.silent)
 	if err != nil {
 		if len(message.buttons) > 0 {
 			if rmErr := app.removeKeyboard(ctx, token, numericChatID, msgID); rmErr != nil {
@@ -40,7 +40,7 @@ func (app application) runPrompt(ctx context.Context, token string, chatID any, 
 			}
 		}
 		if errors.Is(err, errPromptTimeout) {
-			if _, sendErr := app.send(ctx, token, chatID, outgoing{text: timeoutText}); sendErr != nil {
+			if _, sendErr := app.send(ctx, token, chatID, outgoing{text: timeoutText, silent: message.silent}); sendErr != nil {
 				app.warn("failed to send timeout notice", sendErr)
 			}
 		}
@@ -73,7 +73,7 @@ func (app application) runPrompt(ctx context.Context, token string, chatID any, 
 	return nil
 }
 
-func awaitAnswer(ctx context.Context, token string, chatID int64, questionMsgID int, buttons []string, after time.Time) (promptAnswer, error) {
+func awaitAnswer(ctx context.Context, token string, chatID int64, questionMsgID int, buttons []string, after time.Time, silent bool) (promptAnswer, error) {
 	found := make(chan promptAnswer, 1)
 	extend := make(chan struct{}, 1)
 	failures := make(chan error, 1)
@@ -159,7 +159,7 @@ func awaitAnswer(ctx context.Context, token string, chatID int64, questionMsgID 
 			sent := checkinSent
 			mu.Unlock()
 			if !sent {
-				id, sendErr := sendOutgoing(ctx, token, chatID, outgoing{text: checkinText})
+				id, sendErr := sendOutgoing(ctx, token, chatID, outgoing{text: checkinText, silent: silent})
 				if sendErr == nil {
 					mu.Lock()
 					checkinSent, checkinMsgID = true, id

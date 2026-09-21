@@ -53,7 +53,7 @@ type application struct {
 	lookPath        func(string) (string, error)
 	learn           func(context.Context, string, time.Time) (int64, error)
 	send            func(context.Context, string, any, outgoing) (int, error)
-	awaitAnswer     func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error)
+	awaitAnswer     func(context.Context, string, int64, int, []string, time.Time, bool) (promptAnswer, error)
 	answerCallback  func(context.Context, string, string) error
 	removeKeyboard  func(context.Context, string, int64, int) error
 	appendAnswer    func(context.Context, string, int64, int, string, bool) error

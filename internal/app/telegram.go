@@ -81,10 +81,7 @@ func sendOutgoing(ctx context.Context, token string, chatID any, message outgoin
 	requestCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	if message.attachment == nil {
-		params := &bot.SendMessageParams{ChatID: chatID, Text: message.text}
-		if markup := inlineKeyboard(message.buttons); markup != nil {
-			params.ReplyMarkup = markup
-		}
+		params := newSendMessageParams(chatID, message)
 		msg, err := client.SendMessage(requestCtx, params)
 		if err != nil {
 			return 0, err
@@ -92,25 +89,57 @@ func sendOutgoing(ctx context.Context, token string, chatID any, message outgoin
 		return msg.ID, nil
 	}
 	if message.asDocument {
-		params := &bot.SendDocumentParams{ChatID: chatID, Document: message.attachment.file, Caption: message.text}
-		if markup := inlineKeyboard(message.buttons); markup != nil {
-			params.ReplyMarkup = markup
-		}
+		params := newSendDocumentParams(chatID, message)
 		msg, err := client.SendDocument(requestCtx, params)
 		if err != nil {
 			return 0, err
 		}
 		return msg.ID, nil
 	}
-	params := &bot.SendPhotoParams{ChatID: chatID, Photo: message.attachment.file, Caption: message.text}
-	if markup := inlineKeyboard(message.buttons); markup != nil {
-		params.ReplyMarkup = markup
-	}
+	params := newSendPhotoParams(chatID, message)
 	msg, err := client.SendPhoto(requestCtx, params)
 	if err != nil {
 		return 0, err
 	}
 	return msg.ID, nil
+}
+
+func newSendMessageParams(chatID any, message outgoing) *bot.SendMessageParams {
+	params := &bot.SendMessageParams{
+		ChatID:              chatID,
+		Text:                message.text,
+		DisableNotification: message.silent,
+	}
+	if markup := inlineKeyboard(message.buttons); markup != nil {
+		params.ReplyMarkup = markup
+	}
+	return params
+}
+
+func newSendPhotoParams(chatID any, message outgoing) *bot.SendPhotoParams {
+	params := &bot.SendPhotoParams{
+		ChatID:              chatID,
+		Photo:               message.attachment.file,
+		Caption:             message.text,
+		DisableNotification: message.silent,
+	}
+	if markup := inlineKeyboard(message.buttons); markup != nil {
+		params.ReplyMarkup = markup
+	}
+	return params
+}
+
+func newSendDocumentParams(chatID any, message outgoing) *bot.SendDocumentParams {
+	params := &bot.SendDocumentParams{
+		ChatID:              chatID,
+		Document:            message.attachment.file,
+		Caption:             message.text,
+		DisableNotification: message.silent,
+	}
+	if markup := inlineKeyboard(message.buttons); markup != nil {
+		params.ReplyMarkup = markup
+	}
+	return params
 }
 
 func answerCallbackQuery(ctx context.Context, token, callbackQueryID string) error {
