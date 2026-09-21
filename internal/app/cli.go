@@ -45,6 +45,7 @@ type cliOptions struct {
 	help      bool
 	version   bool
 	update    bool
+	dryRun    bool
 }
 
 type settings struct {
@@ -71,13 +72,14 @@ func parseCLI(args []string) (cliOptions, error) {
 	flags.BoolVar(&opts.help, "h", false, "show help")
 	flags.BoolVar(&opts.version, "version", false, "show version")
 	flags.BoolVar(&opts.update, "update", false, "update tlgme to the latest release")
+	flags.BoolVar(&opts.dryRun, "dry-run", false, "validate a send without contacting Telegram")
 
 	if err := flags.Parse(args); err != nil {
 		return cliOptions{}, fmt.Errorf("%w\n\n%s", err, usageText)
 	}
 	if opts.help {
-		if opts.update {
-			return cliOptions{}, errors.New("--update cannot be combined with other options")
+		if opts.update || opts.dryRun {
+			return cliOptions{}, errors.New("--help cannot be combined with --update or --dry-run")
 		}
 		return opts, nil
 	}
@@ -85,13 +87,13 @@ func parseCLI(args []string) (cliOptions, error) {
 		return cliOptions{}, fmt.Errorf("unexpected positional arguments: %s\n\n%s", strings.Join(flags.Args(), " "), usageText)
 	}
 	if opts.version {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.update {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.update || opts.dryRun {
 			return cliOptions{}, errors.New("--version cannot be combined with other options")
 		}
 		return opts, nil
 	}
 	if opts.update {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.dryRun {
 			return cliOptions{}, errors.New("--update cannot be combined with other options")
 		}
 		return opts, nil
@@ -99,7 +101,7 @@ func parseCLI(args []string) (cliOptions, error) {
 
 	setMode := opts.setToken.set || opts.setChatID.set
 	if setMode {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.dryRun {
 			return cliOptions{}, errors.New("--set-token and --set-chat-id cannot be combined with action or override flags")
 		}
 		if opts.setToken.set && strings.TrimSpace(opts.setToken.value) == "" {
@@ -114,6 +116,9 @@ func parseCLI(args []string) (cliOptions, error) {
 	}
 
 	if opts.learn {
+		if opts.dryRun {
+			return cliOptions{}, errors.New("--dry-run cannot be combined with --learn")
+		}
 		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || len(opts.buttons) > 0 {
 			return cliOptions{}, errors.New("--learn cannot be combined with --text, --image, --file, --filename, --prompt, or --button")
 		}
@@ -147,6 +152,9 @@ func parseCLI(args []string) (cliOptions, error) {
 			return cliOptions{}, errors.New("--button requires a non-empty label")
 		}
 	}
+	if opts.dryRun && !opts.text.set && !opts.image.set && !opts.file.set {
+		return cliOptions{}, errors.New("--dry-run requires --text, --image, or --file")
+	}
 	return opts, nil
 }
 
@@ -173,6 +181,7 @@ Options:
   --learn            Replace the saved chat ID after receiving /start.
   --version          Show the installed version.
   --update           Update tlgme to the latest release.
+  --dry-run          Validate a send without contacting Telegram; reads stdin attachments.
   --help, -h         Show this help.`
 
 func (app application) printHelp() {
