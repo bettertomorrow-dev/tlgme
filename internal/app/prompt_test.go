@@ -233,6 +233,117 @@ func TestRunPromptTimesOutWithoutButtonsSkipsRemove(t *testing.T) {
 	}
 }
 
+func TestWaitForPromptShortTimeoutOmitsCheckin(t *testing.T) {
+	ctx := context.Background()
+	var sends int
+	_, err := waitForPromptAnswer(
+		ctx,
+		make(chan promptAnswer),
+		make(chan error),
+		make(chan struct{}),
+		time.Now(),
+		20*time.Millisecond,
+		20*time.Millisecond,
+		&promptWaitState{},
+		func(context.Context) (int, error) {
+			sends++
+			return 1, nil
+		},
+	)
+	if !errors.Is(err, errPromptTimeout) {
+		t.Fatalf("got %v, want prompt timeout", err)
+	}
+	if sends != 0 {
+		t.Fatalf("got %d check-in sends", sends)
+	}
+}
+
+func TestWaitForPromptSchedulesCheckinBeforeDeadline(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sent := make(chan time.Time, 1)
+	result := make(chan error, 1)
+	start := time.Now()
+	go func() {
+		_, err := waitForPromptAnswer(
+			ctx,
+			make(chan promptAnswer),
+			make(chan error),
+			make(chan struct{}),
+			start,
+			80*time.Millisecond,
+			20*time.Millisecond,
+			&promptWaitState{},
+			func(context.Context) (int, error) {
+				sent <- time.Now()
+				return 1, nil
+			},
+		)
+		result <- err
+	}()
+
+	select {
+	case sentAt := <-sent:
+		if !sentAt.After(start.Add(40*time.Millisecond)) || !sentAt.Before(start.Add(80*time.Millisecond)) {
+			t.Fatalf("check-in sent at %s, outside the window before deadline %s", sentAt, start.Add(80*time.Millisecond))
+		}
+		cancel()
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("check-in was not scheduled")
+	}
+	if err := <-result; !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v, want cancellation after check-in", err)
+	}
+}
+
+func TestWaitForPromptFailedCheckinStillTimesOut(t *testing.T) {
+	var sends int
+	_, err := waitForPromptAnswer(
+		context.Background(),
+		make(chan promptAnswer),
+		make(chan error),
+		make(chan struct{}),
+		time.Now(),
+		80*time.Millisecond,
+		20*time.Millisecond,
+		&promptWaitState{},
+		func(context.Context) (int, error) {
+			sends++
+			return 0, errors.New("check-in failed")
+		},
+	)
+	if !errors.Is(err, errPromptTimeout) {
+		t.Fatalf("got %v, want prompt timeout", err)
+	}
+	if sends != 1 {
+		t.Fatalf("got %d check-in sends, want one attempt", sends)
+	}
+}
+
+func TestWaitForPromptElapsedDeadlineSkipsCheckin(t *testing.T) {
+	var sends int
+	_, err := waitForPromptAnswer(
+		context.Background(),
+		make(chan promptAnswer),
+		make(chan error),
+		make(chan struct{}),
+		time.Now().Add(-2*time.Second),
+		time.Second,
+		20*time.Millisecond,
+		&promptWaitState{},
+		func(context.Context) (int, error) {
+			sends++
+			return 1, nil
+		},
+	)
+	if !errors.Is(err, errPromptTimeout) {
+		t.Fatalf("got %v, want prompt timeout", err)
+	}
+	if sends != 0 {
+		t.Fatalf("got %d stale check-in sends", sends)
+	}
+}
+
 func TestRunPromptRequiresChat(t *testing.T) {
 	app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "@alerts"})
 	err := app.run(context.Background(), []string{"--text", "hello?", "--prompt"})
