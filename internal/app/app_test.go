@@ -15,13 +15,14 @@ import (
 
 func TestRunSendsMessageToEnvironmentChat(t *testing.T) {
 	var gotToken, gotMessage string
+	var gotRetries int
 	var gotChatID any
 	app := testApplication(map[string]string{
 		botTokenEnv: "secret",
 		chatIDEnv:   "-123",
 	})
 	app.send = func(_ context.Context, token string, chatID any, message outgoing) (int, error) {
-		gotToken, gotChatID, gotMessage = token, chatID, message.text
+		gotToken, gotChatID, gotMessage, gotRetries = token, chatID, message.text, message.retries
 		return 1, nil
 	}
 
@@ -30,6 +31,33 @@ func TestRunSendsMessageToEnvironmentChat(t *testing.T) {
 	}
 	if gotToken != "secret" || gotChatID != int64(-123) || gotMessage != "job finished" {
 		t.Fatalf("unexpected send: token=%q chat=%v message=%q", gotToken, gotChatID, gotMessage)
+	}
+	if gotRetries != defaultRetryAttempts {
+		t.Fatalf("got retries=%d", gotRetries)
+	}
+}
+
+func TestRunPassesRetryToPromptAndTimeoutNotice(t *testing.T) {
+	var promptRetries int
+	var timeoutRetries int
+	app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
+	app.send = func(_ context.Context, _ string, _ any, message outgoing) (int, error) {
+		if message.text == timeoutText {
+			timeoutRetries = message.retries
+		}
+		return 1, nil
+	}
+	app.awaitAnswer = func(_ context.Context, _ string, _ int64, _ int, _ []string, _ time.Time, retries int) (promptAnswer, error) {
+		promptRetries = retries
+		return promptAnswer{}, errPromptTimeout
+	}
+
+	err := app.run(context.Background(), []string{"--text", "continue?", "--prompt", "--retry", "4"})
+	if !errors.Is(err, errPromptTimeout) {
+		t.Fatal(err)
+	}
+	if promptRetries != 4 || timeoutRetries != 4 {
+		t.Fatalf("prompt retries=%d timeout retries=%d", promptRetries, timeoutRetries)
 	}
 }
 
@@ -289,7 +317,7 @@ func testApplication(env map[string]string) application {
 		send: func(context.Context, string, any, outgoing) (int, error) {
 			return 0, errors.New("unexpected send")
 		},
-		awaitAnswer: func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+		awaitAnswer: func(context.Context, string, int64, int, []string, time.Time, int) (promptAnswer, error) {
 			return promptAnswer{}, errors.New("unexpected awaitAnswer")
 		},
 		answerCallback: func(context.Context, string, string) error {

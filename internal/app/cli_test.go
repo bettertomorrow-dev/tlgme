@@ -65,3 +65,37 @@ func TestParseUpdate(t *testing.T) {
 		}
 	}
 }
+
+func TestParseRetry(t *testing.T) {
+	opts, err := parseCLI([]string{"--text", "hello"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.retry.value != defaultRetryAttempts || opts.retry.set {
+		t.Fatalf("default retry=%#v", opts.retry)
+	}
+
+	opts, err = parseCLI([]string{"--text", "hello", "--retry", "0"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.retry.value != 0 || !opts.retry.set {
+		t.Fatalf("explicit retry=%#v", opts.retry)
+	}
+
+	for _, args := range [][]string{
+		{"--text", "hello", "--retry", "-1"},
+		{"--text", "hello", "--retry", "many"},
+		{"--retry", "1"},
+		{"--learn", "--retry", "1"},
+		{"--version", "--retry", "1"},
+		{"--set-token", "token", "--retry", "1"},
+	} {
+		if _, err := parseCLI(args); err == nil {
+			t.Fatalf("expected retry validation error for %v", args)
+		}
+	}
+	if _, err := parseCLI([]string{"--help", "--retry", "1"}); err == nil || !strings.Contains(err.Error(), "--retry cannot be combined with --help") {
+		t.Fatalf("help retry error=%v", err)
+	}
+}

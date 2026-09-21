@@ -16,6 +16,7 @@ import (
 
 type attachment struct {
 	file        models.InputFile
+	data        []byte
 	filename    string
 	contentType string
 	size        int
@@ -28,10 +29,11 @@ type outgoing struct {
 	asDocument bool
 	fallback   bool
 	buttons    []string
+	retries    int
 }
 
 func (opts cliOptions) outgoing(stdin io.Reader) (outgoing, error) {
-	message := outgoing{text: opts.text.value, buttons: opts.buttons}
+	message := outgoing{text: opts.text.value, buttons: opts.buttons, retries: opts.retry.value}
 	source := opts.image
 	if opts.file.set {
 		source = opts.file
@@ -110,11 +112,19 @@ func resolveAttachmentFrom(source, filename string, stdin io.Reader) (attachment
 	}
 	return attachment{
 		file:        &models.InputFileUpload{Filename: filename, Data: bytes.NewReader(data)},
+		data:        data,
 		filename:    filename,
 		contentType: contentType,
 		size:        len(data),
 		upload:      true,
 	}, nil
+}
+
+func (a attachment) inputFile() models.InputFile {
+	if !a.upload {
+		return a.file
+	}
+	return &models.InputFileUpload{Filename: a.filename, Data: bytes.NewReader(a.data)}
 }
 
 func decodeBase64(value string) ([]byte, error) {

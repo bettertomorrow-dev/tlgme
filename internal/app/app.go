@@ -14,23 +14,24 @@ import (
 )
 
 const (
-	botTokenEnv      = "TG_BOT_TOKEN"
-	chatIDEnv        = "TG_CHAT_ID"
-	configDirName    = "tlgme"
-	configName       = "config.json"
-	requestTimeout   = 10 * time.Second
-	uploadTimeout    = 60 * time.Second
-	probeTimeout     = 5 * time.Second
-	pollTimeout      = 30 * time.Second
-	promptTimeout    = 5 * time.Minute
-	checkinLeadTime  = 30 * time.Second
-	checkinExtension = 5 * time.Minute
-	checkinText      = "Still there? React to this message to get 5 more minutes."
-	timeoutText      = "Request timed out waiting for a reply."
-	callbackDataPref = "opt:"
-	maxPhotoSize     = 10 << 20
-	maxCaptionLength = 1024
-	eyesEmoji        = "\U0001F440"
+	botTokenEnv          = "TG_BOT_TOKEN"
+	chatIDEnv            = "TG_CHAT_ID"
+	configDirName        = "tlgme"
+	configName           = "config.json"
+	requestTimeout       = 10 * time.Second
+	uploadTimeout        = 60 * time.Second
+	defaultRetryAttempts = 2
+	probeTimeout         = 5 * time.Second
+	pollTimeout          = 30 * time.Second
+	promptTimeout        = 5 * time.Minute
+	checkinLeadTime      = 30 * time.Second
+	checkinExtension     = 5 * time.Minute
+	checkinText          = "Still there? React to this message to get 5 more minutes."
+	timeoutText          = "Request timed out waiting for a reply."
+	callbackDataPref     = "opt:"
+	maxPhotoSize         = 10 << 20
+	maxCaptionLength     = 1024
+	eyesEmoji            = "\U0001F440"
 	// checkmarkEmoji acknowledges a button-tap answer. Telegram's setMessageReaction
 	// only accepts a fixed emoji set for bots and rejects "\u2705" (✅) with
 	// REACTION_INVALID, so thumbs-up is used instead.
@@ -53,7 +54,7 @@ type application struct {
 	lookPath        func(string) (string, error)
 	learn           func(context.Context, string, time.Time) (int64, error)
 	send            func(context.Context, string, any, outgoing) (int, error)
-	awaitAnswer     func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error)
+	awaitAnswer     func(context.Context, string, int64, int, []string, time.Time, int) (promptAnswer, error)
 	answerCallback  func(context.Context, string, string) error
 	removeKeyboard  func(context.Context, string, int64, int) error
 	appendAnswer    func(context.Context, string, int64, int, string, bool) error
@@ -223,7 +224,7 @@ func (app application) runLearn(ctx context.Context, path string, cfg config, to
 }
 
 func (app application) confirmConnection(ctx context.Context, token string, chatID *chatTarget) error {
-	if _, err := app.send(ctx, token, chatID.value, outgoing{text: testMessageText}); err != nil {
+	if _, err := app.send(ctx, token, chatID.value, outgoing{text: testMessageText, retries: defaultRetryAttempts}); err != nil {
 		return fmt.Errorf("chat ID was saved, but confirmation failed: %w", err)
 	}
 	fmt.Fprintf(app.stdout, "Connected to chat %v.\n", chatID.value)
