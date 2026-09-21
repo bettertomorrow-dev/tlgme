@@ -97,7 +97,7 @@ func TestRunFailureStreamContracts(t *testing.T) {
 			app: func() application {
 				app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
 				app.send = func(context.Context, string, any, outgoing) (int, error) { return 1, nil }
-				app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+				app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool) (promptAnswer, error) {
 					return promptAnswer{}, errPromptTimeout
 				}
 				return app

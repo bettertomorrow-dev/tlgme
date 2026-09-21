@@ -138,7 +138,9 @@ func (app application) run(ctx context.Context, args []string) error {
 	if opts.update {
 		return app.runUpdate(ctx)
 	}
-	defer app.notifyUpdate(ctx)
+	if !opts.dryRun {
+		defer app.notifyUpdate(ctx)
+	}
 	if opts.version {
 		app.printVersion()
 		return nil
@@ -168,6 +170,16 @@ func (app application) run(ctx context.Context, args []string) error {
 			return app.notConfigured("bot token")
 		}
 		return app.runLearn(ctx, path, cfg, resolved.token)
+	}
+	if opts.dryRun {
+		if missing := missingSettings(resolved); len(missing) > 0 {
+			return app.notConfigured(missing...)
+		}
+		message, err := opts.outgoing(app.stdin)
+		if err != nil {
+			return inputError(err)
+		}
+		return app.runDryRun(resolved.chatID, opts.prompt, message)
 	}
 
 	if opts.text.set || opts.image.set || opts.file.set {

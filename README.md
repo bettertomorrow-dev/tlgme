@@ -120,6 +120,22 @@ stdin and base64 payloads; paths and URLs supply a name automatically.
 `--image` upload is over 10 MB or is not an image, the command warns and sends
 it as a file instead. Uploads have a 60-second timeout.
 
+## Validate a send without sending it
+
+Add `--dry-run` to a message, image, or file command to resolve settings and
+the outgoing payload without contacting Telegram:
+
+```bash
+tlgme --text "Chart regenerated" --image /tmp/chart.png --dry-run
+```
+
+It prints the resolved target, message or caption length, attachment type,
+filename, byte size, prompt state, and button count. It reads local files,
+base64 data, data URIs, and stdin as usual. URL attachments are not downloaded
+and report `byte-size: unknown`. Dry runs require both configured settings,
+never print the bot token, skip the background update check, and do not write
+configuration or update-cache files.
+
 ## Ask for a reply
 
 Add `--prompt` to send a question and wait for the answer:
