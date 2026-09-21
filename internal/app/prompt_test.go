@@ -26,9 +26,12 @@ func TestRunPromptSendsQuestionAndReturnsReply(t *testing.T) {
 		promptQuestion, promptButtons = message.text, message.buttons
 		return 10, nil
 	}
-	app.awaitAnswer = func(_ context.Context, _ string, chatID int64, questionMsgID int, buttons []string, _ time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(_ context.Context, _ string, chatID int64, questionMsgID int, buttons []string, _ time.Time, timeout time.Duration) (promptAnswer, error) {
 		if chatID != 42 || questionMsgID != 10 || len(buttons) != 0 {
 			t.Fatalf("unexpected await chat=%d msg=%d buttons=%v", chatID, questionMsgID, buttons)
+		}
+		if timeout != promptTimeout {
+			t.Fatalf("unexpected timeout %s", timeout)
 		}
 		return promptAnswer{text: "user answer", replyMsgID: 99}, nil
 	}
@@ -66,7 +69,7 @@ func TestRunPromptWithButtonTap(t *testing.T) {
 		gotButtons = message.buttons
 		return 11, nil
 	}
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, time.Duration) (promptAnswer, error) {
 		return promptAnswer{text: "Yes", callbackID: "cb-1"}, nil
 	}
 	app.removeKeyboard = func(context.Context, string, int64, int) error {
@@ -122,7 +125,7 @@ func TestRunPromptWithAttachmentEditsCaption(t *testing.T) {
 		got = message
 		return 11, nil
 	}
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, time.Duration) (promptAnswer, error) {
 		return promptAnswer{text: "Yes", callbackID: "cb-1"}, nil
 	}
 	app.answerCallback = func(context.Context, string, string) error { return nil }
@@ -150,7 +153,7 @@ func TestRunPromptTextReplyWithButtonsRemovesKeyboard(t *testing.T) {
 	var appendCalled bool
 	app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
 	app.send = func(context.Context, string, any, outgoing) (int, error) { return 5, nil }
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, time.Duration) (promptAnswer, error) {
 		return promptAnswer{text: "custom", replyMsgID: 7}, nil
 	}
 	app.removeKeyboard = func(context.Context, string, int64, int) error {
@@ -192,7 +195,7 @@ func TestRunPromptTimesOutAndNotifiesChat(t *testing.T) {
 		sends = append(sends, message.text)
 		return 1, nil
 	}
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, time.Duration) (promptAnswer, error) {
 		return promptAnswer{}, errPromptTimeout
 	}
 	app.removeKeyboard = func(context.Context, string, int64, int) error {
@@ -213,7 +216,7 @@ func TestRunPromptTimesOutWithoutButtonsSkipsRemove(t *testing.T) {
 	var removeCalled bool
 	app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
 	app.send = func(context.Context, string, any, outgoing) (int, error) { return 1, nil }
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, time.Duration) (promptAnswer, error) {
 		return promptAnswer{}, errPromptTimeout
 	}
 	app.removeKeyboard = func(context.Context, string, int64, int) error {
@@ -227,6 +230,117 @@ func TestRunPromptTimesOutWithoutButtonsSkipsRemove(t *testing.T) {
 	}
 	if removeCalled {
 		t.Fatal("removeKeyboard should not run without buttons")
+	}
+}
+
+func TestWaitForPromptShortTimeoutOmitsCheckin(t *testing.T) {
+	ctx := context.Background()
+	var sends int
+	_, err := waitForPromptAnswer(
+		ctx,
+		make(chan promptAnswer),
+		make(chan error),
+		make(chan struct{}),
+		time.Now(),
+		20*time.Millisecond,
+		20*time.Millisecond,
+		&promptWaitState{},
+		func(context.Context) (int, error) {
+			sends++
+			return 1, nil
+		},
+	)
+	if !errors.Is(err, errPromptTimeout) {
+		t.Fatalf("got %v, want prompt timeout", err)
+	}
+	if sends != 0 {
+		t.Fatalf("got %d check-in sends", sends)
+	}
+}
+
+func TestWaitForPromptSchedulesCheckinBeforeDeadline(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	sent := make(chan time.Time, 1)
+	result := make(chan error, 1)
+	start := time.Now()
+	go func() {
+		_, err := waitForPromptAnswer(
+			ctx,
+			make(chan promptAnswer),
+			make(chan error),
+			make(chan struct{}),
+			start,
+			80*time.Millisecond,
+			20*time.Millisecond,
+			&promptWaitState{},
+			func(context.Context) (int, error) {
+				sent <- time.Now()
+				return 1, nil
+			},
+		)
+		result <- err
+	}()
+
+	select {
+	case sentAt := <-sent:
+		if !sentAt.After(start.Add(40*time.Millisecond)) || !sentAt.Before(start.Add(80*time.Millisecond)) {
+			t.Fatalf("check-in sent at %s, outside the window before deadline %s", sentAt, start.Add(80*time.Millisecond))
+		}
+		cancel()
+	case <-time.After(250 * time.Millisecond):
+		t.Fatal("check-in was not scheduled")
+	}
+	if err := <-result; !errors.Is(err, context.Canceled) {
+		t.Fatalf("got %v, want cancellation after check-in", err)
+	}
+}
+
+func TestWaitForPromptFailedCheckinStillTimesOut(t *testing.T) {
+	var sends int
+	_, err := waitForPromptAnswer(
+		context.Background(),
+		make(chan promptAnswer),
+		make(chan error),
+		make(chan struct{}),
+		time.Now(),
+		80*time.Millisecond,
+		20*time.Millisecond,
+		&promptWaitState{},
+		func(context.Context) (int, error) {
+			sends++
+			return 0, errors.New("check-in failed")
+		},
+	)
+	if !errors.Is(err, errPromptTimeout) {
+		t.Fatalf("got %v, want prompt timeout", err)
+	}
+	if sends != 1 {
+		t.Fatalf("got %d check-in sends, want one attempt", sends)
+	}
+}
+
+func TestWaitForPromptElapsedDeadlineSkipsCheckin(t *testing.T) {
+	var sends int
+	_, err := waitForPromptAnswer(
+		context.Background(),
+		make(chan promptAnswer),
+		make(chan error),
+		make(chan struct{}),
+		time.Now().Add(-2*time.Second),
+		time.Second,
+		20*time.Millisecond,
+		&promptWaitState{},
+		func(context.Context) (int, error) {
+			sends++
+			return 1, nil
+		},
+	)
+	if !errors.Is(err, errPromptTimeout) {
+		t.Fatalf("got %v, want prompt timeout", err)
+	}
+	if sends != 0 {
+		t.Fatalf("got %d stale check-in sends", sends)
 	}
 }
 
@@ -251,7 +365,7 @@ func TestRunPromptReactFailureStillReturnsReply(t *testing.T) {
 	app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
 	app.stdout = &stdout
 	app.send = func(context.Context, string, any, outgoing) (int, error) { return 1, nil }
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, time.Duration) (promptAnswer, error) {
 		return promptAnswer{text: "ok", replyMsgID: 1}, nil
 	}
 	app.react = func(context.Context, string, int64, int, string) error {

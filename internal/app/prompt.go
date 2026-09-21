@@ -20,7 +20,14 @@ type promptAnswer struct {
 	callbackID string
 }
 
-func (app application) runPrompt(ctx context.Context, token string, chatID any, message outgoing) error {
+type promptWaitState struct {
+	mu               sync.Mutex
+	checkinAttempted bool
+	checkinSent      bool
+	checkinMsgID     int
+}
+
+func (app application) runPrompt(ctx context.Context, token string, chatID any, message outgoing, timeout time.Duration) error {
 	numericChatID, ok := chatID.(int64)
 	if !ok {
 		return errors.New("--prompt requires a private/group chat, not a channel username")
@@ -32,7 +39,7 @@ func (app application) runPrompt(ctx context.Context, token string, chatID any, 
 		return fmt.Errorf("send prompt: %w", err)
 	}
 
-	ans, err := app.awaitAnswer(ctx, token, numericChatID, msgID, message.buttons, sentAt)
+	ans, err := app.awaitAnswer(ctx, token, numericChatID, msgID, message.buttons, sentAt, timeout)
 	if err != nil {
 		if len(message.buttons) > 0 {
 			if rmErr := app.removeKeyboard(ctx, token, numericChatID, msgID); rmErr != nil {
@@ -73,16 +80,12 @@ func (app application) runPrompt(ctx context.Context, token string, chatID any, 
 	return nil
 }
 
-func awaitAnswer(ctx context.Context, token string, chatID int64, questionMsgID int, buttons []string, after time.Time) (promptAnswer, error) {
+func awaitAnswer(ctx context.Context, token string, chatID int64, questionMsgID int, buttons []string, after time.Time, timeout time.Duration) (promptAnswer, error) {
 	found := make(chan promptAnswer, 1)
 	extend := make(chan struct{}, 1)
 	failures := make(chan error, 1)
 
-	var (
-		mu           sync.Mutex
-		checkinSent  bool
-		checkinMsgID int
-	)
+	state := &promptWaitState{}
 
 	handler := func(_ context.Context, _ *bot.Bot, update *models.Update) {
 		if ans := matchingCallback(update, chatID, questionMsgID, buttons); ans != nil {
@@ -99,9 +102,9 @@ func awaitAnswer(ctx context.Context, token string, chatID int64, questionMsgID 
 			}
 			return
 		}
-		mu.Lock()
-		id, sent := checkinMsgID, checkinSent
-		mu.Unlock()
+		state.mu.Lock()
+		id, sent := state.checkinMsgID, state.checkinSent
+		state.mu.Unlock()
 		if sent && matchesCheckinReaction(update, chatID, id) {
 			select {
 			case extend <- struct{}{}:
@@ -136,8 +139,30 @@ func awaitAnswer(ctx context.Context, token string, chatID int64, questionMsgID 
 	}
 	go client.Start(waitCtx)
 
-	deadline := after.Add(promptTimeout)
-	timer := time.NewTimer(time.Until(deadline) - checkinLeadTime)
+	return waitForPromptAnswer(ctx, found, failures, extend, after, timeout, checkinLeadTime, state,
+		func(checkinCtx context.Context) (int, error) {
+			return sendOutgoing(checkinCtx, token, chatID, outgoing{text: checkinText})
+		})
+}
+
+func waitForPromptAnswer(
+	ctx context.Context,
+	found <-chan promptAnswer,
+	failures <-chan error,
+	extend <-chan struct{},
+	after time.Time,
+	timeout time.Duration,
+	checkinLead time.Duration,
+	state *promptWaitState,
+	sendCheckin func(context.Context) (int, error),
+) (promptAnswer, error) {
+	deadline := after.Add(timeout)
+	checkinEnabled := timeout > checkinLead
+	timerDelay := time.Until(deadline)
+	if checkinEnabled {
+		timerDelay -= checkinLead
+	}
+	timer := time.NewTimer(timerDelay)
 	defer timer.Stop()
 
 	for {
@@ -150,20 +175,33 @@ func awaitAnswer(ctx context.Context, token string, chatID int64, questionMsgID 
 			return promptAnswer{}, ctx.Err()
 		case <-extend:
 			deadline = time.Now().Add(checkinExtension)
-			mu.Lock()
-			checkinSent = false
-			mu.Unlock()
-			resetTimer(timer, time.Until(deadline)-checkinLeadTime)
+			checkinEnabled = true
+			state.mu.Lock()
+			state.checkinAttempted = false
+			state.checkinSent = false
+			state.mu.Unlock()
+			resetTimer(timer, time.Until(deadline)-checkinLead)
 		case <-timer.C:
-			mu.Lock()
-			sent := checkinSent
-			mu.Unlock()
-			if !sent {
-				id, sendErr := sendOutgoing(ctx, token, chatID, outgoing{text: checkinText})
+			if !checkinEnabled || !time.Now().Before(deadline) {
+				return promptAnswer{}, errPromptTimeout
+			}
+			state.mu.Lock()
+			attempted := state.checkinAttempted
+			state.mu.Unlock()
+			if !attempted {
+				state.mu.Lock()
+				state.checkinAttempted = true
+				state.mu.Unlock()
+				checkinCtx, cancel := context.WithDeadline(ctx, deadline)
+				id, sendErr := sendCheckin(checkinCtx)
+				cancel()
 				if sendErr == nil {
-					mu.Lock()
-					checkinSent, checkinMsgID = true, id
-					mu.Unlock()
+					state.mu.Lock()
+					state.checkinSent, state.checkinMsgID = true, id
+					state.mu.Unlock()
+				}
+				if !time.Now().Before(deadline) {
+					return promptAnswer{}, errPromptTimeout
 				}
 				resetTimer(timer, time.Until(deadline))
 				continue

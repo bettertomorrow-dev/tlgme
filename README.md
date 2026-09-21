@@ -127,7 +127,19 @@ answer=$(tlgme --text "Which environment should I deploy to?" --prompt)
 ```
 
 The command waits up to five minutes for a plain-text reply and prints the
-reply on stdout. The bot reacts with 👀 to the reply.
+reply on stdout. The bot reacts with 👀 to the reply. Use `--timeout` with a
+Go duration when a different initial wait fits the job:
+
+```bash
+answer=$(tlgme --text "Which environment should I deploy to?" --prompt \
+  --timeout 90s)
+```
+
+`--timeout` defaults to `5m` and accepts values such as `30s`, `2m`, and
+`1h`. It only applies to `--prompt` and must be greater than zero. For waits
+of more than 30 seconds, the bot sends its check-in 30 seconds before the
+deadline. Shorter waits skip the check-in. A reaction still adds five minutes
+after a check-in.
 
 Add preset answers with repeatable `--button` flags:
 
@@ -147,8 +159,9 @@ answer=$(tlgme --text "Does this look right?" --image /tmp/preview.png \
   --prompt --button Yes --button "Needs changes")
 ```
 
-About 30 seconds before the deadline, the bot sends a check-in message. React
-to it with any emoji to add five minutes. This can repeat. On timeout, the bot
+About 30 seconds before the deadline, the bot sends a check-in message when
+the configured wait is long enough. React to it with any emoji to add five
+minutes. This can repeat. On timeout, the bot
 removes the buttons, sends `Request timed out waiting for a reply.`, writes an
 error to stderr, and exits nonzero without writing to stdout.
 

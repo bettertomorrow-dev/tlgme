@@ -4,6 +4,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseCLI(t *testing.T) {
@@ -62,6 +63,39 @@ func TestParseUpdate(t *testing.T) {
 	} {
 		if _, err := parseCLI(args); err == nil || !strings.Contains(err.Error(), "cannot be combined") {
 			t.Fatalf("args=%v error=%v", args, err)
+		}
+	}
+}
+
+func TestParsePromptTimeout(t *testing.T) {
+	opts, err := parseCLI([]string{"--text", "Proceed?", "--prompt", "--timeout", "90s"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.timeout != 90*time.Second || !opts.timeoutSet {
+		t.Fatalf("got timeout=%s set=%v", opts.timeout, opts.timeoutSet)
+	}
+
+	opts, err = parseCLI([]string{"--text", "Proceed?", "--prompt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if opts.timeout != promptTimeout || opts.timeoutSet {
+		t.Fatalf("got default timeout=%s set=%v", opts.timeout, opts.timeoutSet)
+	}
+
+	for _, args := range [][]string{
+		{"--text", "Proceed?", "--prompt", "--timeout", "bad"},
+		{"--text", "Proceed?", "--prompt", "--timeout", "0s"},
+		{"--text", "Proceed?", "--prompt", "--timeout", "-1s"},
+		{"--text", "message", "--timeout", "90s"},
+		{"--timeout", "90s"},
+		{"--version", "--timeout", "90s"},
+		{"--learn", "--timeout", "90s"},
+		{"--set-token", "token", "--timeout", "90s"},
+	} {
+		if _, err := parseCLI(args); err == nil {
+			t.Fatalf("expected validation error for %v", args)
 		}
 	}
 }

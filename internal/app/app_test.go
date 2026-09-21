@@ -289,7 +289,7 @@ func testApplication(env map[string]string) application {
 		send: func(context.Context, string, any, outgoing) (int, error) {
 			return 0, errors.New("unexpected send")
 		},
-		awaitAnswer: func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+		awaitAnswer: func(context.Context, string, int64, int, []string, time.Time, time.Duration) (promptAnswer, error) {
 			return promptAnswer{}, errors.New("unexpected awaitAnswer")
 		},
 		answerCallback: func(context.Context, string, string) error {
