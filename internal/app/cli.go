@@ -96,8 +96,11 @@ func parseCLI(args []string) (cliOptions, error) {
 		return cliOptions{}, fmt.Errorf("%w\n\n%s", err, usageText)
 	}
 	if opts.help {
-		if opts.update || opts.retry.set {
+		if opts.update {
 			return cliOptions{}, errors.New("--update cannot be combined with other options")
+		}
+		if opts.retry.set {
+			return cliOptions{}, errors.New("--retry cannot be combined with --help")
 		}
 		return opts, nil
 	}
@@ -190,7 +193,7 @@ Options:
   --image SOURCE     Send an inline image from a URL, path, data URI, base64 data, or stdin.
   --file SOURCE      Send a file from a URL, path, data URI, base64 data, or stdin.
   --filename NAME    Override an attachment filename.
-	  --retry N         Retry a Telegram send up to N additional times (default 2).
+  --retry N         Retry a Telegram send up to N additional times (default 2).
   --prompt           Wait for a text reply or button tap.
   --button LABEL     Add a prompt button. Repeat for more buttons.
   --token TOKEN      Override the bot token for this invocation.

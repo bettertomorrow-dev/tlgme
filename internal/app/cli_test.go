@@ -95,4 +95,7 @@ func TestParseRetry(t *testing.T) {
 			t.Fatalf("expected retry validation error for %v", args)
 		}
 	}
+	if _, err := parseCLI([]string{"--help", "--retry", "1"}); err == nil || !strings.Contains(err.Error(), "--retry cannot be combined with --help") {
+		t.Fatalf("help retry error=%v", err)
+	}
 }

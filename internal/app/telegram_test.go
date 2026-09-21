@@ -150,7 +150,7 @@ func TestRetryClassificationAndUploadReplay(t *testing.T) {
 	if isRetryableTelegramError(context.Background(), &telegramHTTPStatusError{statusCode: 400}) {
 		t.Fatal("HTTP 400 must not retry")
 	}
-	if retryDelay(7, io.ErrUnexpectedEOF) != 30*time.Second {
+	if retryDelay(1000, io.ErrUnexpectedEOF) != 30*time.Second {
 		t.Fatal("backoff must cap at 30 seconds")
 	}
 

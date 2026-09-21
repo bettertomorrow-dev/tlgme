@@ -212,11 +212,10 @@ func retryDelay(attemptNumber int, err error) time.Duration {
 	if errors.As(err, &tooMany) && tooMany.RetryAfter > 0 {
 		return time.Duration(tooMany.RetryAfter) * time.Second
 	}
-	delay := time.Second << attemptNumber
-	if delay > 30*time.Second {
+	if attemptNumber >= 5 {
 		return 30 * time.Second
 	}
-	return delay
+	return time.Second << attemptNumber
 }
 
 func answerCallbackQuery(ctx context.Context, token, callbackQueryID string) error {
