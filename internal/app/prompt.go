@@ -91,7 +91,7 @@ func (app application) runPrompt(ctx context.Context, token string, chatID any, 
 	return nil
 }
 
-func awaitAnswer(ctx context.Context, token string, chatID int64, questionMsgID int, buttons []string, after time.Time, silent bool, timeout time.Duration, int) (promptAnswer, error) {
+func awaitAnswer(ctx context.Context, token string, chatID int64, questionMsgID int, buttons []string, after time.Time, silent bool, timeout time.Duration, retries int) (promptAnswer, error) {
 	found := make(chan promptAnswer, 1)
 	extend := make(chan struct{}, 1)
 	failures := make(chan error, 1)

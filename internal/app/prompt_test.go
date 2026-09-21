@@ -26,7 +26,7 @@ func TestRunPromptSendsQuestionAndReturnsReply(t *testing.T) {
 		promptQuestion, promptButtons = message.text, message.buttons
 		return 10, nil
 	}
-	app.awaitAnswer = func(_ context.Context, _ string, chatID int64, questionMsgID int, buttons []string, _ time.Time, _ bool, timeout time.Duration, int) (promptAnswer, error) {
+	app.awaitAnswer = func(_ context.Context, _ string, chatID int64, questionMsgID int, buttons []string, _ time.Time, _ bool, timeout time.Duration, _ int) (promptAnswer, error) {
 		if chatID != 42 || questionMsgID != 10 || len(buttons) != 0 {
 			t.Fatalf("unexpected await chat=%d msg=%d buttons=%v", chatID, questionMsgID, buttons)
 		}

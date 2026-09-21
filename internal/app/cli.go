@@ -122,7 +122,7 @@ func parseCLI(args []string) (cliOptions, error) {
 		return cliOptions{}, errors.New("--timeout must be greater than zero")
 	}
 	if opts.help {
-		if opts.update || opts.dryRun || opts.retry.set {
+		if opts.update || opts.dryRun {
 			return cliOptions{}, errors.New("--help cannot be combined with --update or --dry-run")
 		}
 		if opts.silent {
@@ -130,6 +130,9 @@ func parseCLI(args []string) (cliOptions, error) {
 		}
 		if opts.timeoutSet && !opts.prompt {
 			return cliOptions{}, errors.New("--timeout requires --prompt")
+		}
+		if opts.retry.set {
+			return cliOptions{}, errors.New("--retry cannot be combined with --help")
 		}
 		return opts, nil
 	}
@@ -238,7 +241,7 @@ Options:
   --image SOURCE     Send an inline image from a URL, path, data URI, base64 data, or stdin.
   --file SOURCE      Send a file from a URL, path, data URI, base64 data, or stdin.
   --filename NAME    Override an attachment filename.
-	  --retry N         Retry a Telegram send up to N additional times (default 2).
+  --retry N         Retry a Telegram send up to N additional times (default 2).
   --prompt           Wait for a text reply or button tap.
   --silent           Send without a notification sound.
   --timeout DURATION Maximum time to wait for a prompt reply (default 5m).
