@@ -40,7 +40,7 @@ func (app application) runPrompt(ctx context.Context, token string, chatID any, 
 		return externalError(fmt.Errorf("send prompt: %w", err))
 	}
 
-	ans, err := app.awaitAnswer(ctx, token, numericChatID, msgID, message.buttons, sentAt, message.silent, timeout)
+	ans, err := app.awaitAnswer(ctx, token, numericChatID, msgID, message.buttons, sentAt, message.silent, timeout, message.retries)
 	if err != nil {
 		if len(message.buttons) > 0 {
 			if rmErr := app.removeKeyboard(ctx, token, numericChatID, msgID); rmErr != nil {
@@ -48,7 +48,7 @@ func (app application) runPrompt(ctx context.Context, token string, chatID any, 
 			}
 		}
 		if errors.Is(err, errPromptTimeout) {
-			if _, sendErr := app.send(ctx, token, chatID, outgoing{text: timeoutText, silent: message.silent}); sendErr != nil {
+			if _, sendErr := app.send(ctx, token, chatID, outgoing{text: timeoutText, silent: message.silent, retries: message.retries}); sendErr != nil {
 				app.warn("failed to send timeout notice", sendErr)
 			}
 		}
@@ -91,7 +91,7 @@ func (app application) runPrompt(ctx context.Context, token string, chatID any, 
 	return nil
 }
 
-func awaitAnswer(ctx context.Context, token string, chatID int64, questionMsgID int, buttons []string, after time.Time, silent bool, timeout time.Duration) (promptAnswer, error) {
+func awaitAnswer(ctx context.Context, token string, chatID int64, questionMsgID int, buttons []string, after time.Time, silent bool, timeout time.Duration, int) (promptAnswer, error) {
 	found := make(chan promptAnswer, 1)
 	extend := make(chan struct{}, 1)
 	failures := make(chan error, 1)
@@ -152,7 +152,7 @@ func awaitAnswer(ctx context.Context, token string, chatID int64, questionMsgID 
 
 	return waitForPromptAnswer(ctx, found, failures, extend, after, timeout, checkinLeadTime, state,
 		func(checkinCtx context.Context) (int, error) {
-			return sendOutgoing(checkinCtx, token, chatID, outgoing{text: checkinText, silent: silent})
+			return sendOutgoing(checkinCtx, token, chatID, outgoing{text: checkinText, silent: silent, retries: retries})
 		})
 }
 

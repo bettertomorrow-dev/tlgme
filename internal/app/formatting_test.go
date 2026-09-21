@@ -101,7 +101,7 @@ func TestFormattedPromptAnswers(t *testing.T) {
 					}
 					return 11, nil
 				}
-				app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool, time.Duration) (promptAnswer, error) {
+				app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool, time.Duration, int) (promptAnswer, error) {
 					return promptAnswer{text: tt.label, callbackID: "cb"}, nil
 				}
 				app.answerCallback = func(context.Context, string, string) error { return nil }

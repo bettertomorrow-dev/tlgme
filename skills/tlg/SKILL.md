@@ -37,6 +37,11 @@ tlgme --text '✅: Fixed <code>login()</code>'
 Run `tlgme` without arguments for first-time setup. Full setup and override
 instructions: [tlgme README](https://github.com/bettertomorrow-dev/tlgme#readme).
 
+`tlgme` retries transient Telegram send failures twice by default. Use
+`--retry N` to set the number of additional attempts, or `--retry 0` for one
+attempt. A transport failure can happen after Telegram accepts a message, so a
+retry may deliver a duplicate. Do not add your own retry loop around `tlgme`.
+
 ## Quiet delivery
 
 Use `--silent` when the user asks for a quiet, silent, or no-sound Telegram
