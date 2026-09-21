@@ -76,28 +76,7 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		stderr = io.Discard
 	}
 	redactions := []string{os.Getenv(botTokenEnv)}
-	app := application{
-		getenv:          os.Getenv,
-		stdin:           stdin,
-		stdout:          stdout,
-		stderr:          stderr,
-		now:             time.Now,
-		configPath:      defaultConfigPath,
-		validateToken:   validateBotToken,
-		checkAPI:        checkTelegramAPI,
-		lookPath:        exec.LookPath,
-		learn:           learnChat,
-		send:            sendOutgoing,
-		awaitAnswer:     awaitAnswer,
-		answerCallback:  answerCallbackQuery,
-		removeKeyboard:  removeInlineKeyboard,
-		appendAnswer:    appendAnswer,
-		react:           react,
-		redactions:      &redactions,
-		updateCachePath: defaultUpdateCachePath,
-		latestRelease:   fetchLatestRelease,
-	}
-	app.installRelease = newReleaseInstaller(stdout, stderr).install
+	app := newApplication(stdin, stdout, stderr, &redactions)
 
 	err := app.run(ctx, args)
 	if ctx.Err() != nil {
@@ -116,6 +95,32 @@ func Run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return code
 	}
 	return 0
+}
+
+var newApplication = func(stdin io.Reader, stdout, stderr io.Writer, redactions *[]string) application {
+	app := application{
+		getenv:          os.Getenv,
+		stdin:           stdin,
+		stdout:          stdout,
+		stderr:          stderr,
+		now:             time.Now,
+		configPath:      defaultConfigPath,
+		validateToken:   validateBotToken,
+		checkAPI:        checkTelegramAPI,
+		lookPath:        exec.LookPath,
+		learn:           learnChat,
+		send:            sendOutgoing,
+		awaitAnswer:     awaitAnswer,
+		answerCallback:  answerCallbackQuery,
+		removeKeyboard:  removeInlineKeyboard,
+		appendAnswer:    appendAnswer,
+		react:           react,
+		redactions:      redactions,
+		updateCachePath: defaultUpdateCachePath,
+		latestRelease:   fetchLatestRelease,
+	}
+	app.installRelease = newReleaseInstaller(stdout, stderr).install
+	return app
 }
 
 func (app application) run(ctx context.Context, args []string) error {

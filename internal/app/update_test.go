@@ -23,6 +23,18 @@ import (
 	"github.com/minio/selfupdate"
 )
 
+type roundTripperFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) {
+	return f(req)
+}
+
+type failingReadCloser struct{ err error }
+
+func (r failingReadCloser) Read([]byte) (int, error) { return 0, r.err }
+
+func (failingReadCloser) Close() error { return nil }
+
 func TestParseSemanticVersion(t *testing.T) {
 	for _, value := range []string{"1", "1.2", "1.2.3.4", "1.02.3", "v1.2.3-beta", "dev"} {
 		if _, err := parseSemanticVersion(value); err == nil {
@@ -101,6 +113,29 @@ func TestFetchReleaseExitClassification(t *testing.T) {
 			t.Fatalf("error %v mapped to %d, want %d", err, code, exitUnexpected)
 		}
 	})
+}
+
+func TestDownloadReadFailureIsExternal(t *testing.T) {
+	readErr := errors.New("connection reset while reading")
+	installer := newReleaseInstaller(io.Discard, io.Discard)
+	installer.client = &http.Client{Transport: roundTripperFunc(func(*http.Request) (*http.Response, error) {
+		return &http.Response{
+			StatusCode:    http.StatusOK,
+			Status:        "200 OK",
+			Body:          failingReadCloser{err: readErr},
+			ContentLength: -1,
+			Header:        make(http.Header),
+		}, nil
+	})}
+
+	_, err := installer.download(context.Background(), releaseAsset{DownloadURL: "https://example.test/tlgme.tar.gz"})
+	if !errors.Is(err, readErr) {
+		t.Fatalf("error %v does not wrap %v", err, readErr)
+	}
+	code, _ := exitResult(err)
+	if code != exitExternal {
+		t.Fatalf("error %v mapped to %d, want %d", err, code, exitExternal)
+	}
 }
 
 func TestUpdateNoticeRunsAfterSendAndUsesCache(t *testing.T) {

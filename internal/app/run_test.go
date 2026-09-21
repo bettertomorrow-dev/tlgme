@@ -3,10 +3,12 @@ package app
 import (
 	"context"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestRunInterface(t *testing.T) {
@@ -70,6 +72,79 @@ func TestRunInterface(t *testing.T) {
 			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 		}
 	})
+}
+
+func TestRunFailureStreamContracts(t *testing.T) {
+	tests := []struct {
+		name   string
+		app    application
+		args   []string
+		code   int
+		stderr string
+	}{
+		{
+			name: "local failure",
+			app: func() application {
+				app := testApplication(nil)
+				app.configPath = func() (string, error) { return "", errors.New("local configuration failure") }
+				return app
+			}(),
+			code:   exitUnexpected,
+			stderr: "tlgme: local configuration failure\n",
+		},
+		{
+			name: "prompt timeout",
+			app: func() application {
+				app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
+				app.send = func(context.Context, string, any, outgoing) (int, error) { return 1, nil }
+				app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+					return promptAnswer{}, errPromptTimeout
+				}
+				return app
+			}(),
+			args:   []string{"--text", "question", "--prompt"},
+			code:   exitPromptTimeout,
+			stderr: "tlgme: timed out waiting for a reply\n",
+		},
+		{
+			name: "external failure",
+			app: func() application {
+				app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
+				app.send = func(context.Context, string, any, outgoing) (int, error) {
+					return 0, errors.New("Telegram offline")
+				}
+				return app
+			}(),
+			args:   []string{"--text", "message"},
+			code:   exitExternal,
+			stderr: "tlgme: send message: Telegram offline\n",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			useRunApplication(t, tt.app)
+			var stdout, stderr strings.Builder
+			code := Run(context.Background(), tt.args, strings.NewReader(""), &stdout, &stderr)
+			if code != tt.code || stdout.Len() != 0 || stderr.String() != tt.stderr {
+				t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+			}
+		})
+	}
+}
+
+func useRunApplication(t *testing.T, template application) {
+	t.Helper()
+	original := newApplication
+	newApplication = func(stdin io.Reader, stdout, stderr io.Writer, redactions *[]string) application {
+		app := template
+		app.stdin = stdin
+		app.stdout = stdout
+		app.stderr = stderr
+		app.redactions = redactions
+		return app
+	}
+	t.Cleanup(func() { newApplication = original })
 }
 
 func TestExitResult(t *testing.T) {

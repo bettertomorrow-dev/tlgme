@@ -424,7 +424,7 @@ func (installer releaseInstaller) download(ctx context.Context, asset releaseAss
 	}
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxUpdateAssetSize+1))
 	if err != nil {
-		return nil, err
+		return nil, externalError(err)
 	}
 	if len(data) > maxUpdateAssetSize {
 		return nil, fmt.Errorf("asset exceeds %d bytes", maxUpdateAssetSize)
