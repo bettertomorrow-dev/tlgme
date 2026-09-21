@@ -3,12 +3,23 @@ package app
 import (
 	"context"
 	"errors"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 )
+
+type countingTransport struct {
+	requests atomic.Int32
+}
+
+func (t *countingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	t.requests.Add(1)
+	return nil, errors.New("unexpected HTTP request")
+}
 
 func TestDryRunOutput(t *testing.T) {
 	png := []byte("\x89PNG\r\n\x1a\n")
@@ -115,6 +126,37 @@ func TestDryRunMissingConfigurationAndPromptTarget(t *testing.T) {
 	code, _ = exitResult(err)
 	if code != exitInvalidInput || stdout.Len() != 0 || !strings.Contains(err.Error(), "private/group chat") {
 		t.Fatalf("code=%d stdout=%q err=%v", code, stdout.String(), err)
+	}
+}
+
+func TestDryRunMakesNoHTTPRequests(t *testing.T) {
+	transport := &countingTransport{}
+	previousTransport := http.DefaultTransport
+	previousClientTransport := http.DefaultClient.Transport
+	http.DefaultTransport = transport
+	http.DefaultClient.Transport = transport
+	t.Cleanup(func() {
+		http.DefaultTransport = previousTransport
+		http.DefaultClient.Transport = previousClientTransport
+	})
+
+	t.Setenv(botTokenEnv, "")
+	t.Setenv(chatIDEnv, "")
+	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+
+	commands := [][]string{
+		{"--text", "hello", "--dry-run", "--token", "secret", "--chat-id", "42"},
+		{"--image", "https://example.com/chart.png", "--dry-run", "--token", "secret", "--chat-id", "42"},
+		{"--text", "Proceed?", "--prompt", "--dry-run", "--token", "secret", "--chat-id", "42"},
+	}
+	for _, args := range commands {
+		var stdout, stderr strings.Builder
+		if code := Run(context.Background(), args, strings.NewReader(""), &stdout, &stderr); code != 0 {
+			t.Fatalf("args=%v code=%d stderr=%q", args, code, stderr.String())
+		}
+	}
+	if got := transport.requests.Load(); got != 0 {
+		t.Fatalf("dry runs made %d HTTP requests", got)
 	}
 }
 
