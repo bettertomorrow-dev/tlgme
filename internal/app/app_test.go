@@ -167,7 +167,7 @@ func TestApplicationExitCodes(t *testing.T) {
 					return map[string]string{botTokenEnv: "secret", chatIDEnv: "42"}[key]
 				}
 				app.send = func(context.Context, string, any, outgoing) (int, error) { return 1, nil }
-				app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool) (promptAnswer, error) {
+				app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool, time.Duration) (promptAnswer, error) {
 					return promptAnswer{}, errPromptTimeout
 				}
 			},
@@ -408,7 +408,7 @@ func testApplication(env map[string]string) application {
 		send: func(context.Context, string, any, outgoing) (int, error) {
 			return 0, errors.New("unexpected send")
 		},
-		awaitAnswer: func(context.Context, string, int64, int, []string, time.Time, bool) (promptAnswer, error) {
+		awaitAnswer: func(context.Context, string, int64, int, []string, time.Time, bool, time.Duration) (promptAnswer, error) {
 			return promptAnswer{}, errors.New("unexpected awaitAnswer")
 		},
 		answerCallback: func(context.Context, string, string) error {
