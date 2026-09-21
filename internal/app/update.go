@@ -123,11 +123,11 @@ func fetchRelease(ctx context.Context, client *http.Client, url string) (release
 
 	resp, err := client.Do(req)
 	if err != nil {
-		return releaseInfo{}, err
+		return releaseInfo{}, externalError(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return releaseInfo{}, fmt.Errorf("GitHub returned %s", resp.Status)
+		return releaseInfo{}, externalError(fmt.Errorf("GitHub returned %s", resp.Status))
 	}
 
 	var payload githubRelease
@@ -413,11 +413,11 @@ func (installer releaseInstaller) download(ctx context.Context, asset releaseAss
 	req.Header.Set("User-Agent", "tlgme/"+version)
 	resp, err := installer.client.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, externalError(err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("server returned %s", resp.Status)
+		return nil, externalError(fmt.Errorf("server returned %s", resp.Status))
 	}
 	if resp.ContentLength > maxUpdateAssetSize {
 		return nil, fmt.Errorf("asset exceeds %d bytes", maxUpdateAssetSize)

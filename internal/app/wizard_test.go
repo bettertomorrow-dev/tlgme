@@ -244,7 +244,7 @@ func TestTokenCheckedNetworkErrorFails(t *testing.T) {
 	w = enterToken(t, w, "secret-token")
 
 	w, _ = step(t, w, tokenCheckedMsg{err: errors.New("dial tcp: no route to host")})
-	if w.exit != 1 || w.phase != phaseDone {
+	if w.exit != exitExternal || w.phase != phaseDone {
 		t.Fatalf("exit=%d phase=%v", w.exit, w.phase)
 	}
 	if !strings.Contains(transcriptOf(w), "Couldn't reach Telegram") {
@@ -380,7 +380,7 @@ func TestStartReceivedNetworkErrorKeepsToken(t *testing.T) {
 	w, _ = step(t, w, tokenCheckedMsg{username: "mybot"})
 
 	w, _ = step(t, w, startReceivedMsg{err: errors.New("connection reset")})
-	if w.exit != 1 || w.phase != phaseDone {
+	if w.exit != exitExternal || w.phase != phaseDone {
 		t.Fatalf("exit=%d phase=%v", w.exit, w.phase)
 	}
 	saved, err := loadConfig(path)
@@ -397,7 +397,7 @@ func TestSetupFinishedTestFailureExitsNonZero(t *testing.T) {
 	w, _ := wizardForTest(t, app, config{}, settings{})
 
 	w, _ = step(t, w, setupFinishedMsg{testErr: errors.New("400: chat not found"), onPath: true})
-	if w.exit != 1 || w.phase != phaseDone {
+	if w.exit != exitExternal || w.phase != phaseDone {
 		t.Fatalf("exit=%d phase=%v", w.exit, w.phase)
 	}
 	log := transcriptOf(w)
@@ -519,7 +519,7 @@ func TestOfflineScreen(t *testing.T) {
 	if !ok {
 		t.Fatalf("unexpected model type %T", next)
 	}
-	if w.exit != 1 || w.phase != phaseDone {
+	if w.exit != exitExternal || w.phase != phaseDone {
 		t.Fatalf("exit=%d phase=%v", w.exit, w.phase)
 	}
 	log := transcriptOf(w)
@@ -571,7 +571,7 @@ func TestWizardSmokeOffline(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if fw, ok := final.(wizard); !ok || fw.exit != 1 {
+	if fw, ok := final.(wizard); !ok || fw.exit != exitExternal {
 		t.Fatalf("final model exit=%d", fw.exit)
 	}
 

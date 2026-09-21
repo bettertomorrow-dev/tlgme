@@ -98,6 +98,93 @@ func TestRunValidation(t *testing.T) {
 	}
 }
 
+func TestApplicationExitCodes(t *testing.T) {
+	tests := []struct {
+		name string
+		app  func(*application)
+		args []string
+		want int
+	}{
+		{
+			name: "invalid arguments",
+			args: []string{"--text", "hello", "--button", "yes"},
+			want: exitInvalidInput,
+		},
+		{
+			name: "invalid payload",
+			args: []string{"--image", "data:image/png;base64,%%%"},
+			want: exitInvalidInput,
+			app: func(app *application) {
+				app.getenv = func(key string) string {
+					return map[string]string{botTokenEnv: "secret", chatIDEnv: "42"}[key]
+				}
+			},
+		},
+		{
+			name: "missing configuration",
+			args: []string{"--text", "hello"},
+			want: exitMissingConfig,
+		},
+		{
+			name: "local configuration failure",
+			args: []string{"--text", "hello"},
+			want: exitUnexpected,
+			app: func(app *application) {
+				app.configPath = func() (string, error) { return "", errors.New("home unavailable") }
+			},
+		},
+		{
+			name: "telegram send failure",
+			args: []string{"--text", "hello"},
+			want: exitExternal,
+			app: func(app *application) {
+				app.getenv = func(key string) string {
+					return map[string]string{botTokenEnv: "secret", chatIDEnv: "42"}[key]
+				}
+			},
+		},
+		{
+			name: "prompt timeout",
+			args: []string{"--text", "hello", "--prompt"},
+			want: exitPromptTimeout,
+			app: func(app *application) {
+				app.getenv = func(key string) string {
+					return map[string]string{botTokenEnv: "secret", chatIDEnv: "42"}[key]
+				}
+				app.send = func(context.Context, string, any, outgoing) (int, error) { return 1, nil }
+				app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time) (promptAnswer, error) {
+					return promptAnswer{}, errPromptTimeout
+				}
+			},
+		},
+		{
+			name: "cancelled send wins over external classification",
+			args: []string{"--text", "hello"},
+			want: exitInterrupted,
+			app: func(app *application) {
+				app.getenv = func(key string) string {
+					return map[string]string{botTokenEnv: "secret", chatIDEnv: "42"}[key]
+				}
+				app.send = func(context.Context, string, any, outgoing) (int, error) { return 0, context.Canceled }
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			app := testApplication(nil)
+			if tt.app != nil {
+				tt.app(&app)
+			}
+			err := app.run(context.Background(), tt.args)
+			code, _ := exitResult(err)
+			if code != tt.want {
+				t.Fatalf("run error %v mapped to %d, want %d", err, code, tt.want)
+			}
+		})
+	}
+}
+
 func TestRunLearnSavesChatAndConfirms(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "nested", "config.json")
 	startedAt := time.Unix(100, 0)
@@ -172,34 +259,36 @@ func TestSendNotConfiguredReportsMissing(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var stdout strings.Builder
+			var stdout, stderr strings.Builder
 			app := testApplication(tt.env)
 			app.stdout = &stdout
+			app.stderr = &stderr
 
 			err := app.run(context.Background(), tt.args)
-			var silent silentExitError
-			if !errors.As(err, &silent) || silent.code != 1 {
-				t.Fatalf("got %v, want silent exit 1", err)
+			code, quiet := exitResult(err)
+			if code != exitMissingConfig || !quiet {
+				t.Fatalf("got (%d, %v), want silent exit %d", code, quiet, exitMissingConfig)
 			}
-			if !strings.Contains(stdout.String(), tt.want) {
-				t.Fatalf("stdout %q, want %q", stdout.String(), tt.want)
+			if stdout.Len() != 0 || !strings.Contains(stderr.String(), tt.want) {
+				t.Fatalf("stdout %q stderr %q, want %q", stdout.String(), stderr.String(), tt.want)
 			}
 		})
 	}
 }
 
 func TestLearnNotConfiguredReportsMissingToken(t *testing.T) {
-	var stdout strings.Builder
+	var stdout, stderr strings.Builder
 	app := testApplication(map[string]string{chatIDEnv: "42"})
 	app.stdout = &stdout
+	app.stderr = &stderr
 
 	err := app.run(context.Background(), []string{"--learn"})
-	var silent silentExitError
-	if !errors.As(err, &silent) || silent.code != 1 {
-		t.Fatalf("got %v, want silent exit 1", err)
+	code, quiet := exitResult(err)
+	if code != exitMissingConfig || !quiet {
+		t.Fatalf("got (%d, %v), want silent exit %d", code, quiet, exitMissingConfig)
 	}
-	if !strings.Contains(stdout.String(), "not configured: missing bot token") {
-		t.Fatalf("stdout %q", stdout.String())
+	if stdout.Len() != 0 || !strings.Contains(stderr.String(), "not configured: missing bot token") {
+		t.Fatalf("stdout %q stderr %q", stdout.String(), stderr.String())
 	}
 }
 

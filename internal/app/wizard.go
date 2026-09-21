@@ -30,12 +30,6 @@ const (
 
 var testMessageText = "TlgMe v" + version + " is connected 👋"
 
-// silentExitError reports a setup exit whose reason was already shown in the
-// transcript, so main must not print it again.
-type silentExitError struct{ code int }
-
-func (e silentExitError) Error() string { return fmt.Sprintf("setup exited with code %d", e.code) }
-
 type wizardPhase int
 
 const (
@@ -158,9 +152,9 @@ func (w wizard) greet() (tea.Model, tea.Cmd) {
 
 // offline commits the offline screen with the direct CLI alternative and
 // quits. The probe already showed everything the user needs, so main exits
-// silently with code 1.
+// silently with the external-service exit code.
 func (w wizard) offline() (tea.Model, tea.Cmd) {
-	w.exit = 1
+	w.exit = exitExternal
 	w.phase = phaseDone
 	body := "Hey! The Telegram API seems to be unreachable.\n\n" +
 		"If you already know your bot token and chat ID, you can set them directly:\n\n" +
@@ -277,7 +271,7 @@ func (w wizard) tokenChecked(msg tokenCheckedMsg) (tea.Model, tea.Cmd) {
 			body := "That token didn't work. Check if you copied it in full.\n\nPaste it again and press Enter."
 			return w, w.commit(w.blockMsg("TlgMe", body, statusWarn))
 		}
-		return w.fail("Couldn't reach Telegram: " + w.app.redact(msg.err.Error()))
+		return w.failWithCode(exitExternal, "Couldn't reach Telegram: "+w.app.redact(msg.err.Error()))
 	}
 	w.username = msg.username
 	if w.persist {
@@ -315,7 +309,7 @@ func (w wizard) startReceived(msg startReceivedMsg) (tea.Model, tea.Cmd) {
 				"\n\nPress Enter to wait another 5 minutes,\nor Ctrl+C to exit."
 			return w, w.commit(w.blockMsg("TlgMe", body, statusWarn))
 		}
-		return w.fail("Couldn't reach Telegram while waiting for /start: " + w.app.redact(msg.err.Error()))
+		return w.failWithCode(exitExternal, "Couldn't reach Telegram while waiting for /start: "+w.app.redact(msg.err.Error()))
 	}
 	w.cfg.ChatID = &chatTarget{value: msg.chatID}
 	if err := saveConfig(w.path, w.cfg); err != nil {
@@ -330,7 +324,7 @@ func (w wizard) setupFinished(msg setupFinishedMsg) (tea.Model, tea.Cmd) {
 	body := "Setup complete. I sent a test message to your chat."
 	status := statusOK
 	if msg.testErr != nil {
-		w.exit = 1
+		w.exit = exitExternal
 		status = statusWarn
 		body = "Setup is complete, but the test message didn't arrive:\n\n" + w.app.redact(msg.testErr.Error())
 	}
@@ -338,7 +332,11 @@ func (w wizard) setupFinished(msg setupFinishedMsg) (tea.Model, tea.Cmd) {
 }
 
 func (w wizard) fail(body string) (tea.Model, tea.Cmd) {
-	w.exit = 1
+	return w.failWithCode(exitUnexpected, body)
+}
+
+func (w wizard) failWithCode(code int, body string) (tea.Model, tea.Cmd) {
+	w.exit = code
 	w.phase = phaseDone
 	return w, tea.Sequence(w.commit(w.blockMsg("TlgMe", body, statusWarn)), tea.Quit)
 }

@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -34,18 +35,18 @@ func TestRunInterface(t *testing.T) {
 		}
 	})
 
-	t.Run("ordinary error", func(t *testing.T) {
+	t.Run("invalid arguments", func(t *testing.T) {
 		var stdout, stderr strings.Builder
 		code := Run(context.Background(), []string{"--unknown"}, strings.NewReader(""), &stdout, &stderr)
-		if code != 1 || stdout.Len() != 0 || !strings.Contains(stderr.String(), "flag provided but not defined") {
+		if code != exitInvalidInput || stdout.Len() != 0 || !strings.Contains(stderr.String(), "flag provided but not defined") {
 			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 		}
 	})
 
-	t.Run("silent error", func(t *testing.T) {
+	t.Run("missing configuration", func(t *testing.T) {
 		var stdout, stderr strings.Builder
 		code := Run(context.Background(), []string{"--text", "hello"}, strings.NewReader(""), &stdout, &stderr)
-		if code != 1 || !strings.Contains(stdout.String(), "not configured: missing bot token and chat ID") || stderr.Len() != 0 {
+		if code != exitMissingConfig || stdout.Len() != 0 || stderr.String() != "tlgme: not configured: missing bot token and chat ID\n" {
 			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 		}
 	})
@@ -55,10 +56,45 @@ func TestRunInterface(t *testing.T) {
 		cancel()
 		var stdout, stderr strings.Builder
 		code := Run(ctx, nil, strings.NewReader(""), &stdout, &stderr)
-		if code != 130 || stderr.Len() != 0 {
+		if code != exitInterrupted || stderr.Len() != 0 {
 			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
 		}
 	})
+
+	t.Run("cancellation takes precedence over invalid arguments", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		var stdout, stderr strings.Builder
+		code := Run(ctx, []string{"--unknown"}, strings.NewReader(""), &stdout, &stderr)
+		if code != exitInterrupted || stderr.Len() != 0 {
+			t.Fatalf("code=%d stdout=%q stderr=%q", code, stdout.String(), stderr.String())
+		}
+	})
+}
+
+func TestExitResult(t *testing.T) {
+	tests := []struct {
+		name  string
+		err   error
+		code  int
+		quiet bool
+	}{
+		{name: "success", code: exitOK},
+		{name: "generic", err: errors.New("broken"), code: exitUnexpected},
+		{name: "input", err: inputError(errors.New("bad flag")), code: exitInvalidInput},
+		{name: "missing config", err: quietExit(exitMissingConfig), code: exitMissingConfig, quiet: true},
+		{name: "timeout", err: errPromptTimeout, code: exitPromptTimeout},
+		{name: "external", err: externalError(errors.New("offline")), code: exitExternal},
+		{name: "wrapped cancellation wins", err: externalError(context.Canceled), code: exitInterrupted, quiet: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			code, quiet := exitResult(tt.err)
+			if code != tt.code || quiet != tt.quiet {
+				t.Fatalf("exitResult(%v) = (%d, %v), want (%d, %v)", tt.err, code, quiet, tt.code, tt.quiet)
+			}
+		})
+	}
 }
 
 func TestApplicationReadsAttachmentFromInjectedStdin(t *testing.T) {

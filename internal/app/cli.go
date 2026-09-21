@@ -225,10 +225,9 @@ func missingSettings(resolved settings) []string {
 	return missing
 }
 
-// notConfigured prints what the command was missing to stdout and returns a
-// silent exit so the message is not duplicated on stderr. Scripts and agents
-// parse this line to decide how to finish setup.
+// notConfigured writes a stable diagnostic to stderr and keeps it from being
+// duplicated by Run.
 func (app application) notConfigured(missing ...string) error {
-	fmt.Fprintf(app.stdout, "not configured: missing %s\n", strings.Join(missing, " and "))
-	return silentExitError{code: 1}
+	fmt.Fprintf(app.stderr, "tlgme: not configured: missing %s\n", strings.Join(missing, " and "))
+	return quietExit(exitMissingConfig)
 }
