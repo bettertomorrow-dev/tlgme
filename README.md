@@ -100,12 +100,12 @@ this send only and is not saved in the config.
 
 ## Format a message
 
-Use `--parse-mode HTML` or `--parse-mode MarkdownV2` with `--text` to opt into
-Telegram formatting. Without the flag, text is sent literally. HTML is usually
-simpler for agents because fewer characters need escaping:
+Messages and captions parse Telegram HTML by default, so formatting needs no
+extra flag. HTML is usually simpler for agents because fewer characters need
+escaping:
 
 ```bash
-tlgme --parse-mode HTML --text '<b>Build passed</b>
+tlgme --text '<b>Build passed</b>
 Branch: <code>feature/formatting</code>
 <a href="https://github.com/bettertomorrow-dev/tlgme">Repository</a>'
 ```
@@ -115,7 +115,18 @@ code, code blocks, and block quotations. Use literal newlines for line breaks.
 Escape dynamic text with `&lt;`, `&gt;`, and `&amp;`, and attribute quotes with
 `&quot;`. Telegram accepts only its documented HTML tags, not arbitrary HTML.
 
-MarkdownV2 is Telegram's syntax, not ordinary Markdown. For example:
+For literal text, including unescaped angle brackets or HTML you want displayed
+as source, use `--parse-mode plain`:
+
+```bash
+tlgme --parse-mode plain --text '<b>This stays literal</b> and 2 < 3'
+```
+
+This changes the previous plain-text default. Escape dynamic content for HTML,
+or select `plain` when sending verbatim text. There is no format autodetection.
+
+Choose `--parse-mode MarkdownV2` for Telegram's Markdown syntax. It is not
+ordinary Markdown. For example:
 
 ```bash
 tlgme --parse-mode MarkdownV2 --text '*Build passed* on `main`\!'

@@ -36,6 +36,50 @@ func TestFormattingCLI(t *testing.T) {
 	}
 }
 
+func TestDefaultHTMLAndPlainOverride(t *testing.T) {
+	for _, mode := range []string{"", "HTML", "MarkdownV2", "plain"} {
+		for _, caption := range []bool{false, true} {
+			args := []string{"--text", "<b>Result</b> &amp; <code>abc1234</code>"}
+			if mode != "" {
+				args = append(args, "--parse-mode", mode)
+			}
+			if caption {
+				args = append(args, "--image", "https://example.com/result.png")
+			}
+			app := testApplication(map[string]string{botTokenEnv: "secret", chatIDEnv: "42"})
+			sent := false
+			app.send = func(_ context.Context, _ string, _ any, message outgoing) (int, error) {
+				sent = true
+				wantMode := mode
+				if mode == "" {
+					wantMode = "HTML"
+				}
+				if mode == "plain" {
+					wantMode = ""
+				}
+				if message.parseMode != wantMode || message.text != args[1] || (message.attachment != nil) != caption {
+					t.Fatalf("mode=%q caption=%v outgoing=%#v", mode, caption, message)
+				}
+				return 11, nil
+			}
+			if err := app.run(context.Background(), args); err != nil {
+				t.Fatal(err)
+			}
+			if !sent {
+				t.Fatal("message not sent")
+			}
+		}
+	}
+	// Plain mode stays visible in dry runs although Telegram receives no parse_mode.
+	app, stdout := dryRunApplication(t, map[string]string{botTokenEnv: "secret", chatIDEnv: "42"}, "")
+	if err := app.run(context.Background(), []string{"--text", "<b>literal</b>", "--parse-mode", "plain", "--dry-run"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(stdout.String(), "parse-mode: plain\n") {
+		t.Fatal(stdout.String())
+	}
+}
+
 func TestFormattedPromptAnswers(t *testing.T) {
 	for _, tt := range []struct{ mode, question, label, escaped string }{
 		{"", "Proceed?", "<yes> & \\!", "<yes> & \\!"},

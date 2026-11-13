@@ -31,7 +31,7 @@ Ping the user on Telegram once, or ask them a question and wait for the reply. N
 ## How to send
 
 ```bash
-tlgme --parse-mode HTML --text '✅: Fixed <code>login()</code>'
+tlgme --text '✅: Fixed <code>login()</code>'
 ```
 
 Run `tlgme` without arguments for first-time setup. Full setup and override
@@ -44,14 +44,14 @@ notification. It suppresses the Telegram notification sound for that command.
 Leave it out for the normal audible completion ping.
 
 ```bash
-tlgme --parse-mode HTML --text "Done: nightly build passed" --silent
+tlgme --text "Done: nightly build passed" --silent
 ```
 
 For a quiet question, add it to the prompt command. The question, any
 check-in, and the timeout notice all stay silent.
 
 ```bash
-answer=$(tlgme --parse-mode HTML --text "Deploy tonight?" --prompt --silent --button Yes --button No)
+answer=$(tlgme --text "Deploy tonight?" --prompt --silent --button Yes --button No)
 ```
 
 ## Attaching an image or a file
@@ -63,7 +63,7 @@ Use `--image` when the user needs an inline preview: screenshots, charts,
 diagrams, and rendered output.
 
 ```bash
-tlgme --parse-mode HTML --text "Done: rendered the dependency graph" --image /tmp/graph.png
+tlgme --text "Done: rendered the dependency graph" --image /tmp/graph.png
 ```
 
 Use `--file` when the bytes matter or the result is not an image: logs,
@@ -71,7 +71,7 @@ reports, PDFs, archives, `.excalidraw` and `.tldr` source files, and
 text-heavy screenshots that Telegram would blur.
 
 ```bash
-tlgme --parse-mode HTML --text "Done: attached the audit report" --file /tmp/report.pdf
+tlgme --text "Done: attached the audit report" --file /tmp/report.pdf
 ```
 
 Pass the path the agent just wrote whenever possible. `--image` and `--file`
@@ -109,7 +109,7 @@ one invocation only and are never saved.
 When you need an answer from the user (not a one-way ping), block on:
 
 ```bash
-tlgme --parse-mode HTML --text "your question here" --prompt
+tlgme --text "your question here" --prompt
 ```
 
 This sends the question, waits up to 5 minutes for a plain-text reply or an inline button tap, and prints the answer on stdout (button label or reply text). A button tap edits the question message to append `Answer: <label>` and reacts with 👍, so the choice stays visible; a text reply gets a 👀 reaction and the buttons are removed instead. If the user reacts to a "still there?" check-in near the deadline, the wait extends by 5 more minutes. On timeout the command exits non-zero, the chat gets a timeout notice, buttons are removed, and stdout is empty. Treat that like any other missing answer: tell the user in chat and don't retry in a loop. Full details: [tlgme README](https://github.com/bettertomorrow-dev/tlgme#readme).
@@ -117,14 +117,14 @@ This sends the question, waits up to 5 minutes for a plain-text reply or an inli
 For yes/no or fixed choices, add `--button` (repeatable):
 
 ```bash
-answer=$(tlgme --parse-mode HTML --text "Proceed with deploy?" --prompt --button Yes --button No)
+answer=$(tlgme --text "Proceed with deploy?" --prompt --button Yes --button No)
 ```
 
 For visual approval, attach the preview to the question. The answer still
 arrives on stdout:
 
 ```bash
-answer=$(tlgme --parse-mode HTML --text "Does this look right?" --image /tmp/preview.png \
+answer=$(tlgme --text "Does this look right?" --image /tmp/preview.png \
   --prompt --button "Looks good" --button "Fix it")
 ```
 
@@ -137,7 +137,7 @@ Use this only when you truly need their input; use a one-way send without `--pro
 When the user asks you to send a plan, proposal, or set of changes to Telegram for them to check or approve, you **must** use `--prompt` with explicit approval buttons — not a one-way `tlgme` message followed by silent waiting. This lets the user approve or reject directly from Telegram. Capture the answer and act on it: proceed on approval; incorporate the feedback or halt on rejection.
 
 ```bash
-answer=$(tlgme --parse-mode HTML --text "Plan ready: migrate auth to OAuth in 3 steps. Approve?" --prompt --button Approve --button "Request changes")
+answer=$(tlgme --text "Plan ready: migrate auth to OAuth in 3 steps. Approve?" --prompt --button Approve --button "Request changes")
 ```
 
 Use a brief summary in `--text`, with short formatted lines when they help the
@@ -163,7 +163,8 @@ traces and diffs in chat or attachments.
 
 ### Formatting
 
-Use `--parse-mode HTML` for agent-authored messages by default. Preserve the
+HTML parsing is enabled by default, so use `tlgme --text` without an extra
+formatting flag for agent-authored messages. Preserve the
 meaning and structure of normal chat formatting with these equivalents:
 
 | In agent chat | In Telegram HTML |
@@ -179,7 +180,7 @@ meaning and structure of normal chat formatting with these equivalents:
 | Lists and paragraphs | Literal newlines, `•` bullets, or numbered lines |
 
 Use the formatting the content calls for, just as in chat. A brief plain sentence
-can still be sent with HTML mode; decorative tags are not required. Adapt Markdown
+can still be sent with the default HTML mode; decorative tags are not required. Adapt Markdown
 headings to bold text and tables to short lists or preformatted text because
 ordinary Telegram messages do not support heading or table tags. More tags are
 listed in [Telegram's formatting reference](https://core.telegram.org/bots/api#formatting-options).
@@ -188,7 +189,7 @@ For example, if the user requests the final commit hash in a completion ping,
 format it as code, just as you would in chat:
 
 ```bash
-tlgme --parse-mode HTML --text '✅: Formatting support ready.
+tlgme --text '✅: Formatting support ready.
 Commit: <code>db1241cfa143b331e6da354648c2761bb3df6f89</code>
 <a href="https://github.com/bettertomorrow-dev/tlgme/pull/39">PR #39</a>'
 ```
@@ -208,14 +209,14 @@ translate chat formatting into HTML.
 
 The mode applies to messages, attachment captions, and prompt-answer edits.
 Button labels are literal text and are escaped when appended to a formatted
-question. Leave `--parse-mode` out when forwarding the user's verbatim text,
-unless they explicitly request a formatting mode.
+question. Use `--parse-mode plain` when forwarding the user's verbatim text or
+when they request plain text, unless they explicitly request a formatting mode.
 
 Telegram permits 4096 characters per message and 1024 per caption after
 formatting is parsed. It validates formatted lengths and malformed markup;
 `--dry-run` reports the mode but cannot validate Telegram's parsing. An API
 error is a failed send, not a reason to silently resend plain text. If the installed
-CLI rejects `--parse-mode`, use an updated local build when the checkout is
+CLI lacks default HTML support, use an updated local build when the checkout is
 available. Otherwise report that the installed version needs updating. Preserve
 the intended formatting instead of silently falling back to a plain-text send.
 
@@ -228,7 +229,7 @@ If `tlgme` exits non-zero (including a `--prompt` timeout), tell the user once i
 **After fixing a bug (user said "ping me in tlg when done"):**
 
 ```bash
-tlgme --parse-mode HTML --text '✅: Fixed <code>login()</code> redirect loop'
+tlgme --text '✅: Fixed <code>login()</code> redirect loop'
 ```
 
 **Immediate ping with custom text:**
@@ -236,11 +237,11 @@ tlgme --parse-mode HTML --text '✅: Fixed <code>login()</code> redirect loop'
 User: `$tlg tests green on main`
 
 ```bash
-tlgme --text "tests green on main"
+tlgme --parse-mode plain --text "tests green on main"
 ```
 
 **Need a decision before continuing (user is away from chat):**
 
 ```bash
-answer=$(tlgme --parse-mode HTML --text "Deploy to prod now, or wait for review?" --prompt --button Deploy --button Wait)
+answer=$(tlgme --text "Deploy to prod now, or wait for review?" --prompt --button Deploy --button Wait)
 ```
