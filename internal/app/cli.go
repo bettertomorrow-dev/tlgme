@@ -31,6 +31,7 @@ func (s *stringList) Set(value string) error {
 func (s *stringList) String() string { return strings.Join(*s, ",") }
 
 type cliOptions struct {
+	parseMode stringOption
 	text      stringOption
 	image     stringOption
 	file      stringOption
@@ -58,6 +59,7 @@ func parseCLI(args []string) (cliOptions, error) {
 	var opts cliOptions
 	flags := flag.NewFlagSet("tlgme", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	flags.Var(&opts.parseMode, "parse-mode", "HTML or MarkdownV2 formatting")
 	flags.Var(&opts.text, "text", "message or question text")
 	flags.Var(&opts.image, "image", "image URL, path, data URI, base64 data, or - for stdin")
 	flags.Var(&opts.file, "file", "file URL, path, data URI, base64 data, or - for stdin")
@@ -78,6 +80,14 @@ func parseCLI(args []string) (cliOptions, error) {
 
 	if err := flags.Parse(args); err != nil {
 		return cliOptions{}, fmt.Errorf("%w\n\n%s", err, usageText)
+	}
+	if opts.parseMode.set {
+		if opts.parseMode.value != "HTML" && opts.parseMode.value != "MarkdownV2" {
+			return cliOptions{}, errors.New("--parse-mode must be HTML or MarkdownV2")
+		}
+		if !opts.text.set || opts.help || opts.version || opts.update || opts.learn || opts.setToken.set || opts.setChatID.set {
+			return cliOptions{}, errors.New("--parse-mode requires --text and a send action")
+		}
 	}
 	if opts.help {
 		if opts.update || opts.dryRun {
@@ -177,6 +187,7 @@ const usageText = `Usage:
 
 Options:
   --text TEXT        Message or question text.
+  --parse-mode MODE  Format text as HTML or MarkdownV2.
   --image SOURCE     Send an inline image from a URL, path, data URI, base64 data, or stdin.
   --file SOURCE      Send a file from a URL, path, data URI, base64 data, or stdin.
   --filename NAME    Override an attachment filename.

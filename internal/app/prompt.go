@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"strconv"
 	"strings"
@@ -54,8 +55,15 @@ func (app application) runPrompt(ctx context.Context, token string, chatID any, 
 		if err := app.answerCallback(ctx, token, ans.callbackID); err != nil {
 			app.warn("answer callback failed", err)
 		}
-		answeredText := message.text + "\n\nAnswer: " + ans.text
-		if err := app.appendAnswer(ctx, token, numericChatID, msgID, answeredText, message.attachment != nil); err != nil {
+		label := ans.text
+		switch message.parseMode {
+		case "HTML":
+			label = html.EscapeString(label)
+		case "MarkdownV2":
+			label = bot.EscapeMarkdown(strings.ReplaceAll(label, `\`, `\\`))
+		}
+		answeredText := message.text + "\n\nAnswer: " + label
+		if err := app.appendAnswer(ctx, token, numericChatID, msgID, answeredText, message.attachment != nil, message.parseMode); err != nil {
 			app.warn("failed to record answer on message", err)
 		}
 		if err := app.react(ctx, token, numericChatID, msgID, checkmarkEmoji); err != nil {

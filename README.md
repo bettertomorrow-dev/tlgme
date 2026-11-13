@@ -1,6 +1,6 @@
 # TlgMe
 
-`tlgme` sends plain-text Telegram messages and can wait for replies.
+`tlgme` sends plain-text or formatted Telegram messages and can wait for replies.
 
 ## Install
 
@@ -98,6 +98,44 @@ Text must be passed with `--text`. Positional messages are not supported. Add
 `--silent` to suppress the Telegram notification sound. The setting applies to
 this send only and is not saved in the config.
 
+## Format a message
+
+Use `--parse-mode HTML` or `--parse-mode MarkdownV2` with `--text` to opt into
+Telegram formatting. Without the flag, text is sent literally. HTML is usually
+simpler for agents because fewer characters need escaping:
+
+```bash
+tlgme --parse-mode HTML --text '<b>Build passed</b>
+Branch: <code>feature/formatting</code>
+<a href="https://github.com/bettertomorrow-dev/tlgme">Repository</a>'
+```
+
+HTML supports bold, italic, underline, strikethrough, spoilers, links, inline
+code, code blocks, and block quotations. Use literal newlines for line breaks.
+Escape dynamic text with `&lt;`, `&gt;`, and `&amp;`, and attribute quotes with
+`&quot;`. Telegram accepts only its documented HTML tags, not arbitrary HTML.
+
+MarkdownV2 is Telegram's syntax, not ordinary Markdown. For example:
+
+```bash
+tlgme --parse-mode MarkdownV2 --text '*Build passed* on `main`\!'
+```
+
+Outside code and link targets, escape these characters and backslashes with a
+backslash: `` _ * [ ] ( ) ~ ` > # + - = | { } . ! ``. See the
+[Telegram formatting reference](https://core.telegram.org/bots/api#formatting-options)
+for syntax and context-specific escaping rules.
+
+The selected mode also applies to attachment captions and prompt questions.
+Button-answer edits preserve formatting and append the answer as literal text.
+Check-ins and timeout notices remain plain text.
+
+Telegram limits messages to 4096 characters and captions to 1024 after parsing
+formatting. Plain captions are checked locally by Unicode character count;
+Telegram validates formatted lengths and markup. Invalid markup fails with an
+error, without a plain-text retry. Dry runs show the selected mode but cannot
+validate Telegram markup or its parsed length.
+
 ## Send an image or file
 
 ```bash
@@ -130,7 +168,8 @@ tlgme --text "Chart regenerated" --image /tmp/chart.png --dry-run
 ```
 
 It prints the resolved target, message or caption length, attachment type,
-filename, byte size, prompt state, and button count. It reads local files,
+filename, byte size, parse mode, prompt state, and button count. Length fields
+report UTF-8 source bytes, including any markup. It reads local files,
 base64 data, data URIs, and stdin as usual. URL attachments are not downloaded
 and report `byte-size: unknown`. Dry runs require both configured settings,
 never print the bot token, skip the background update check, and do not write
@@ -266,6 +305,6 @@ Linux, and Windows targets published on the Releases page.
 ## Skill
 
 This repository ships the [`tlg` skill](skills/tlg/SKILL.md), which teaches
-agents to send a one-line completion ping and ask questions through `tlgme`.
+agents to send completion pings, formatted summaries, and questions through `tlgme`.
 Install it from
 [skills/tlg](https://github.com/bettertomorrow-dev/tlgme/tree/main/skills/tlg).

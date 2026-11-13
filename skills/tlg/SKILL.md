@@ -79,8 +79,8 @@ also accept an HTTP(S) URL, base64 data, a base64 `data:` URI, or `-` for
 stdin. Use `--filename report.pdf` with stdin or base64 when the displayed
 filename matters.
 
-`--text` becomes the attachment caption. Keep it to one short line and under
-1024 characters; detailed results stay in chat. `--image` falls back to a
+`--text` becomes the attachment caption. Keep routine captions brief and within
+1024 characters after formatting is parsed; detailed results stay in chat. `--image` falls back to a
 file with a warning when the upload exceeds 10 MB or is not an image.
 
 ## First-time setup
@@ -140,11 +140,14 @@ When the user asks you to send a plan, proposal, or set of changes to Telegram f
 answer=$(tlgme --text "Plan ready: migrate auth to OAuth in 3 steps. Approve?" --prompt --button Approve --button "Request changes")
 ```
 
-Summarize the plan in one short line in the `--text`; the full plan stays in chat.
+Use a brief summary in `--text`, with short formatted lines when they help the
+user decide. Keep the full plan in chat unless the user asks for it in Telegram.
 
 ## Message content
 
-One short plain-text line. Telegram gets plain text only (no markdown).
+Keep routine completion pings to one short sentence. For an agent-authored
+summary, question, or requested detailed message, use formatting when it makes
+the result easier to scan.
 
 | Situation                             | Message                                                |
 | ------------------------------------- | ------------------------------------------------------ |
@@ -153,7 +156,42 @@ One short plain-text line. Telegram gets plain text only (no markdown).
 | User gave text after `/tlg` or `$tlg` | Send that text **verbatim**                            |
 | `/tlg` or `$tlg` with no extra text   | Brief status of the current task (same rules as above) |
 
-Keep it push-notification sized: a few words to one short sentence. No stack traces, diffs, or multi-paragraph summaries.
+Keep routine notifications push-sized. Use a few short lines for a summary or
+proposal when helpful, and longer content only when requested. Keep stack
+traces and diffs in chat or attachments.
+
+### Formatting
+
+Prefer `--parse-mode HTML` for agent-authored formatting. Use bold for the
+outcome or a short label, `<code>` for commands, branches, and paths, and
+`<a href="URL">label</a>` for links. Use literal newlines and plain bullet
+characters for short lists. More tags are documented in
+[Telegram's formatting reference](https://core.telegram.org/bots/api#formatting-options).
+
+```bash
+tlgme --parse-mode HTML --text '<b>Build passed</b>
+Branch: <code>feature/formatting</code>
+<a href="https://github.com/bettertomorrow-dev/tlgme">Repository</a>'
+```
+
+Escape dynamic text before inserting it into HTML: `&` becomes `&amp;`, `<`
+becomes `&lt;`, `>` becomes `&gt;`, and attribute quotes become `&quot;`.
+Only Telegram's supported tags work. The single-quoted shell example keeps
+backticks and `$` literal; for text containing apostrophes, pass a safely quoted
+variable or a quoted heredoc instead of interpolating it into shell code.
+
+`--parse-mode MarkdownV2` is also supported, but uses Telegram-specific syntax
+and escaping, not ordinary Markdown. Prefer HTML unless MarkdownV2 is needed.
+
+The mode applies to messages, attachment captions, and prompt-answer edits.
+Button labels are literal text and are escaped when appended to a formatted
+question. Leave `--parse-mode` out when forwarding the user's verbatim text,
+unless they explicitly request a formatting mode.
+
+Telegram permits 4096 characters per message and 1024 per caption after
+formatting is parsed. It validates formatted lengths and malformed markup;
+`--dry-run` reports the mode but cannot validate Telegram's parsing. An API
+error is a failed send, not a reason to silently resend plain text.
 
 ## Errors
 

@@ -108,6 +108,7 @@ func newSendMessageParams(chatID any, message outgoing) *bot.SendMessageParams {
 	params := &bot.SendMessageParams{
 		ChatID:              chatID,
 		Text:                message.text,
+		ParseMode:           models.ParseMode(message.parseMode),
 		DisableNotification: message.silent,
 	}
 	if markup := inlineKeyboard(message.buttons); markup != nil {
@@ -121,6 +122,7 @@ func newSendPhotoParams(chatID any, message outgoing) *bot.SendPhotoParams {
 		ChatID:              chatID,
 		Photo:               message.attachment.file,
 		Caption:             message.text,
+		ParseMode:           models.ParseMode(message.parseMode),
 		DisableNotification: message.silent,
 	}
 	if markup := inlineKeyboard(message.buttons); markup != nil {
@@ -134,6 +136,7 @@ func newSendDocumentParams(chatID any, message outgoing) *bot.SendDocumentParams
 		ChatID:              chatID,
 		Document:            message.attachment.file,
 		Caption:             message.text,
+		ParseMode:           models.ParseMode(message.parseMode),
 		DisableNotification: message.silent,
 	}
 	if markup := inlineKeyboard(message.buttons); markup != nil {
@@ -182,7 +185,7 @@ func removeInlineKeyboard(ctx context.Context, token string, chatID int64, messa
 	return err
 }
 
-func appendAnswer(ctx context.Context, token string, chatID int64, messageID int, text string, hasAttachment bool) error {
+func appendAnswer(ctx context.Context, token string, chatID int64, messageID int, text string, hasAttachment bool, parseMode string) error {
 	client, err := bot.New(
 		token,
 		bot.WithSkipGetMe(),
@@ -196,13 +199,13 @@ func appendAnswer(ctx context.Context, token string, chatID int64, messageID int
 	defer cancel()
 	if hasAttachment {
 		_, err = client.EditMessageCaption(requestCtx, &bot.EditMessageCaptionParams{
-			ChatID: chatID, MessageID: messageID, Caption: text,
+			ChatID: chatID, MessageID: messageID, Caption: text, ParseMode: models.ParseMode(parseMode),
 			ReplyMarkup: models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}},
 		})
 		return err
 	}
 	_, err = client.EditMessageText(requestCtx, &bot.EditMessageTextParams{
-		ChatID: chatID, MessageID: messageID, Text: text,
+		ChatID: chatID, MessageID: messageID, Text: text, ParseMode: models.ParseMode(parseMode),
 		ReplyMarkup: models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}},
 	})
 	return err

@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-telegram/bot/models"
 )
@@ -24,6 +25,7 @@ type attachment struct {
 
 type outgoing struct {
 	text       string
+	parseMode  string
 	attachment *attachment
 	asDocument bool
 	fallback   bool
@@ -32,7 +34,7 @@ type outgoing struct {
 }
 
 func (opts cliOptions) outgoing(stdin io.Reader) (outgoing, error) {
-	message := outgoing{text: opts.text.value, buttons: opts.buttons, silent: opts.silent}
+	message := outgoing{text: opts.text.value, parseMode: opts.parseMode.value, buttons: opts.buttons, silent: opts.silent}
 	source := opts.image
 	if opts.file.set {
 		source = opts.file
@@ -41,7 +43,7 @@ func (opts cliOptions) outgoing(stdin io.Reader) (outgoing, error) {
 	if !source.set {
 		return message, nil
 	}
-	if len(message.text) > maxCaptionLength {
+	if message.parseMode == "" && utf8.RuneCountInString(message.text) > maxCaptionLength {
 		return outgoing{}, fmt.Errorf("--text caption must be at most %d characters", maxCaptionLength)
 	}
 	attachment, err := resolveAttachmentFrom(source.value, opts.filename.value, stdin)
