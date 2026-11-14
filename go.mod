@@ -8,7 +8,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.0
 	github.com/charmbracelet/x/ansi v0.11.8
 	github.com/charmbracelet/x/term v0.2.2
-	github.com/go-telegram/bot v1.27.0
+	github.com/go-telegram/bot v1.28.0
 	github.com/minio/selfupdate v0.6.0
 	github.com/muesli/termenv v0.16.0
 )
