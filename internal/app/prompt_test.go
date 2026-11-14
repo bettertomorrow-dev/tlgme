@@ -102,7 +102,7 @@ func TestRunPromptWithButtonTap(t *testing.T) {
 		callbackID = id
 		return nil
 	}
-	app.appendAnswer = func(_ context.Context, _ string, chatID int64, messageID int, text string, _ bool) error {
+	app.appendAnswer = func(_ context.Context, _ string, chatID int64, messageID int, text string, _ bool, _ string) error {
 		if chatID != 42 || messageID != 11 {
 			t.Fatalf("unexpected appendAnswer chat=%d msg=%d", chatID, messageID)
 		}
@@ -151,7 +151,7 @@ func TestRunPromptWithAttachmentEditsCaption(t *testing.T) {
 		return promptAnswer{text: "Yes", callbackID: "cb-1"}, nil
 	}
 	app.answerCallback = func(context.Context, string, string) error { return nil }
-	app.appendAnswer = func(_ context.Context, _ string, _ int64, _ int, _ string, attachment bool) error {
+	app.appendAnswer = func(_ context.Context, _ string, _ int64, _ int, _ string, attachment bool, _ string) error {
 		hasAttachment = attachment
 		return nil
 	}
@@ -190,7 +190,7 @@ func TestRunPromptTextReplyWithButtonsRemovesKeyboard(t *testing.T) {
 		callbackCalled = true
 		return nil
 	}
-	app.appendAnswer = func(context.Context, string, int64, int, string, bool) error {
+	app.appendAnswer = func(context.Context, string, int64, int, string, bool, string) error {
 		appendCalled = true
 		return nil
 	}

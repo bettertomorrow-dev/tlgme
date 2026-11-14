@@ -37,44 +37,44 @@ func TestDryRunOutput(t *testing.T) {
 			name: "text",
 			args: []string{"--text", "hello", "--token", "temporary-token", "--chat-id", "99", "--dry-run"},
 			want: "dry-run: no network requests made\n" +
-				"target: 99\nmessage-length: 5\nattachment-kind: none\nprompt: false\nbutton-count: 0\n",
+				"target: 99\nmessage-length: 5\nattachment-kind: none\nparse-mode: HTML\nprompt: false\nbutton-count: 0\n",
 		},
 		{
 			name: "local image",
 			args: []string{"--text", "chart", "--image", path, "--dry-run"},
 			want: "dry-run: no network requests made\n" +
-				"target: 42\ncaption-length: 5\nattachment-kind: photo\nfilename: chart.png\nbyte-size: 8\nprompt: false\nbutton-count: 0\n",
+				"target: 42\ncaption-length: 5\nattachment-kind: photo\nfilename: chart.png\nbyte-size: 8\nparse-mode: HTML\nprompt: false\nbutton-count: 0\n",
 		},
 		{
 			name: "data URI",
 			args: []string{"--file", "data:application/pdf;base64,JVBERi0=", "--dry-run"},
 			want: "dry-run: no network requests made\n" +
-				"target: 42\ncaption-length: 0\nattachment-kind: document\nfilename: file.pdf\nbyte-size: 5\nprompt: false\nbutton-count: 0\n",
+				"target: 42\ncaption-length: 0\nattachment-kind: document\nfilename: file.pdf\nbyte-size: 5\nparse-mode: HTML\nprompt: false\nbutton-count: 0\n",
 		},
 		{
 			name:  "stdin",
 			stdin: "iVBORw0KGgo=",
 			args:  []string{"--image", "-", "--filename", "stdin.png", "--dry-run"},
 			want: "dry-run: no network requests made\n" +
-				"target: 42\ncaption-length: 0\nattachment-kind: photo\nfilename: stdin.png\nbyte-size: 8\nprompt: false\nbutton-count: 0\n",
+				"target: 42\ncaption-length: 0\nattachment-kind: photo\nfilename: stdin.png\nbyte-size: 8\nparse-mode: HTML\nprompt: false\nbutton-count: 0\n",
 		},
 		{
 			name: "URL",
 			args: []string{"--image", "https://example.com/build.png", "--dry-run"},
 			want: "dry-run: no network requests made\n" +
-				"target: 42\ncaption-length: 0\nattachment-kind: photo\nfilename: build.png\nbyte-size: unknown\nprompt: false\nbutton-count: 0\n",
+				"target: 42\ncaption-length: 0\nattachment-kind: photo\nfilename: build.png\nbyte-size: unknown\nparse-mode: HTML\nprompt: false\nbutton-count: 0\n",
 		},
 		{
 			name: "fallback document",
 			args: []string{"--image", "data:application/pdf;base64,JVBERi0=", "--dry-run"},
 			want: "dry-run: no network requests made\n" +
-				"target: 42\ncaption-length: 0\nattachment-kind: document\nfilename: file.pdf\nbyte-size: 5\nprompt: false\nbutton-count: 0\n",
+				"target: 42\ncaption-length: 0\nattachment-kind: document\nfilename: file.pdf\nbyte-size: 5\nparse-mode: HTML\nprompt: false\nbutton-count: 0\n",
 		},
 		{
 			name: "prompt",
 			args: []string{"--text", "Proceed?", "--prompt", "--button", "Yes", "--button", "No", "--dry-run"},
 			want: "dry-run: no network requests made\n" +
-				"target: 42\nmessage-length: 8\nattachment-kind: none\nprompt: true\nbutton-count: 2\n",
+				"target: 42\nmessage-length: 8\nattachment-kind: none\nparse-mode: HTML\nprompt: true\nbutton-count: 2\n",
 		},
 	}
 

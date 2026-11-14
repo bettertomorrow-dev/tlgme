@@ -417,7 +417,7 @@ func testApplication(env map[string]string) application {
 		removeKeyboard: func(context.Context, string, int64, int) error {
 			return errors.New("unexpected removeKeyboard")
 		},
-		appendAnswer: func(context.Context, string, int64, int, string, bool) error {
+		appendAnswer: func(context.Context, string, int64, int, string, bool, string) error {
 			return errors.New("unexpected appendAnswer")
 		},
 		react: func(context.Context, string, int64, int, string) error {

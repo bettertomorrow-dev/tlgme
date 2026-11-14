@@ -56,7 +56,7 @@ type application struct {
 	awaitAnswer     func(context.Context, string, int64, int, []string, time.Time, bool) (promptAnswer, error)
 	answerCallback  func(context.Context, string, string) error
 	removeKeyboard  func(context.Context, string, int64, int) error
-	appendAnswer    func(context.Context, string, int64, int, string, bool) error
+	appendAnswer    func(context.Context, string, int64, int, string, bool, string) error
 	react           func(context.Context, string, int64, int, string) error
 	redactions      *[]string
 	updateCachePath func() (string, error)

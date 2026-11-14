@@ -1,6 +1,7 @@
 package app
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 )
@@ -33,6 +34,7 @@ func (app application) runDryRun(chatID *chatTarget, prompt bool, message outgoi
 			fmt.Fprintln(app.stdout, "byte-size: unknown")
 		}
 	}
+	fmt.Fprintf(app.stdout, "parse-mode: %s\n", cmp.Or(message.parseMode, "plain"))
 	fmt.Fprintf(app.stdout, "prompt: %t\n", prompt)
 	fmt.Fprintf(app.stdout, "button-count: %d\n", len(message.buttons))
 	return nil

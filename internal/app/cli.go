@@ -31,6 +31,7 @@ func (s *stringList) Set(value string) error {
 func (s *stringList) String() string { return strings.Join(*s, ",") }
 
 type cliOptions struct {
+	parseMode stringOption
 	text      stringOption
 	image     stringOption
 	file      stringOption
@@ -55,9 +56,10 @@ type settings struct {
 }
 
 func parseCLI(args []string) (cliOptions, error) {
-	var opts cliOptions
+	opts := cliOptions{parseMode: stringOption{value: "HTML"}}
 	flags := flag.NewFlagSet("tlgme", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
+	flags.Var(&opts.parseMode, "parse-mode", "HTML (default), MarkdownV2, or plain text")
 	flags.Var(&opts.text, "text", "message or question text")
 	flags.Var(&opts.image, "image", "image URL, path, data URI, base64 data, or - for stdin")
 	flags.Var(&opts.file, "file", "file URL, path, data URI, base64 data, or - for stdin")
@@ -78,6 +80,14 @@ func parseCLI(args []string) (cliOptions, error) {
 
 	if err := flags.Parse(args); err != nil {
 		return cliOptions{}, fmt.Errorf("%w\n\n%s", err, usageText)
+	}
+	if opts.parseMode.set {
+		if opts.parseMode.value != "HTML" && opts.parseMode.value != "MarkdownV2" && opts.parseMode.value != "plain" {
+			return cliOptions{}, errors.New("--parse-mode must be HTML, MarkdownV2, or plain")
+		}
+		if !opts.text.set || opts.help || opts.version || opts.update || opts.learn || opts.setToken.set || opts.setChatID.set {
+			return cliOptions{}, errors.New("--parse-mode requires --text and a send action")
+		}
 	}
 	if opts.help {
 		if opts.update || opts.dryRun {
@@ -163,6 +173,9 @@ func parseCLI(args []string) (cliOptions, error) {
 	if opts.dryRun && !opts.text.set && !opts.image.set && !opts.file.set {
 		return cliOptions{}, errors.New("--dry-run requires --text, --image, or --file")
 	}
+	if opts.parseMode.value == "plain" {
+		opts.parseMode.value = ""
+	}
 	return opts, nil
 }
 
@@ -177,6 +190,7 @@ const usageText = `Usage:
 
 Options:
   --text TEXT        Message or question text.
+  --parse-mode MODE  HTML (default), MarkdownV2, or plain text.
   --image SOURCE     Send an inline image from a URL, path, data URI, base64 data, or stdin.
   --file SOURCE      Send a file from a URL, path, data URI, base64 data, or stdin.
   --filename NAME    Override an attachment filename.
