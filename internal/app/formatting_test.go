@@ -101,7 +101,7 @@ func TestFormattedPromptAnswers(t *testing.T) {
 					}
 					return 11, nil
 				}
-				app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool) (promptAnswer, error) {
+				app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool, time.Duration) (promptAnswer, error) {
 					return promptAnswer{text: tt.label, callbackID: "cb"}, nil
 				}
 				app.answerCallback = func(context.Context, string, string) error { return nil }
@@ -114,7 +114,7 @@ func TestFormattedPromptAnswers(t *testing.T) {
 					}
 					return nil
 				}
-				if err := app.runPrompt(context.Background(), "secret", int64(42), message); err != nil {
+				if err := app.runPrompt(context.Background(), "secret", int64(42), message, promptTimeout); err != nil {
 					t.Fatal(err)
 				}
 				if !edited || stdout.String() != tt.label+"\n" {
