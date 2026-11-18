@@ -183,7 +183,7 @@ func dryRunApplication(t *testing.T, env map[string]string, stdin string) (appli
 		t.Fatal("dry run polled Telegram")
 		return 0, errors.New("unreachable")
 	}
-	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool, time.Duration) (promptAnswer, error) {
+	app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool, time.Duration, int) (promptAnswer, error) {
 		t.Fatal("dry run polled for a prompt answer")
 		return promptAnswer{}, errors.New("unreachable")
 	}

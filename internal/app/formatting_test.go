@@ -101,7 +101,7 @@ func TestFormattedPromptAnswers(t *testing.T) {
 					}
 					return 11, nil
 				}
-				app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool, time.Duration) (promptAnswer, error) {
+				app.awaitAnswer = func(context.Context, string, int64, int, []string, time.Time, bool, time.Duration, int) (promptAnswer, error) {
 					return promptAnswer{text: tt.label, callbackID: "cb"}, nil
 				}
 				app.answerCallback = func(context.Context, string, string) error { return nil }
@@ -217,5 +217,52 @@ func TestRejectedMarkupDoesNotRetry(t *testing.T) {
 	}
 	if calls != 1 {
 		t.Fatalf("made %d requests, want 1", calls)
+	}
+}
+
+func TestRetryUploadPreservesPayloadAndFormatting(t *testing.T) {
+	original := http.DefaultTransport
+	t.Cleanup(func() { http.DefaultTransport = original })
+	attachment, err := resolveAttachmentFrom("data:application/pdf;base64,JVBERi0=", "report.pdf", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	http.DefaultTransport = formattingTransport(func(r *http.Request) (*http.Response, error) {
+		calls++
+		if err := r.ParseMultipartForm(1 << 20); err != nil {
+			t.Fatal(err)
+		}
+		defer r.MultipartForm.RemoveAll()
+		if r.FormValue("parse_mode") != "HTML" || r.FormValue("disable_notification") != "true" || r.FormValue("caption") != "<b>report</b>" {
+			t.Fatal(r.MultipartForm.Value)
+		}
+		uploads := 0
+		for _, files := range r.MultipartForm.File {
+			for _, file := range files {
+				reader, err := file.Open()
+				if err != nil {
+					t.Fatal(err)
+				}
+				data, err := io.ReadAll(reader)
+				reader.Close()
+				if err != nil || string(data) != "%PDF-" {
+					t.Fatalf("attempt %d data=%q err=%v", calls, data, err)
+				}
+				uploads++
+			}
+		}
+		if uploads != 1 {
+			t.Fatalf("uploads=%d", uploads)
+		}
+		status, body := 200, `{"ok":true,"result":{"message_id":11}}`
+		if calls == 1 {
+			status, body = 503, "unavailable"
+		}
+		return &http.Response{StatusCode: status, Header: make(http.Header), Body: io.NopCloser(strings.NewReader(body))}, nil
+	})
+	id, err := sendOutgoing(context.Background(), "123:fake", int64(42), outgoing{text: "<b>report</b>", parseMode: "HTML", silent: true, attachment: &attachment, asDocument: true, retries: 1})
+	if err != nil || id != 11 || calls != 2 {
+		t.Fatalf("id=%d calls=%d err=%v", id, calls, err)
 	}
 }

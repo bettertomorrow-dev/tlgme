@@ -3,7 +3,11 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -65,8 +69,37 @@ func newClient(token string, timeout time.Duration) (*bot.Bot, error) {
 	return bot.New(
 		token,
 		bot.WithSkipGetMe(),
-		bot.WithHTTPClient(timeout, &http.Client{Timeout: timeout}),
+		bot.WithHTTPClient(timeout, telegramHTTPClient(timeout)),
 	)
+}
+
+type telegramHTTPStatusError struct {
+	statusCode int
+}
+
+func (e *telegramHTTPStatusError) Error() string {
+	return fmt.Sprintf("Telegram returned HTTP %d", e.statusCode)
+}
+
+type telegramStatusTransport struct {
+	base http.RoundTripper
+}
+
+func (t telegramStatusTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	base := t.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	resp, err := base.RoundTrip(req)
+	if err != nil || resp == nil || resp.StatusCode < http.StatusInternalServerError {
+		return resp, err
+	}
+	resp.Body.Close()
+	return nil, &telegramHTTPStatusError{statusCode: resp.StatusCode}
+}
+
+func telegramHTTPClient(timeout time.Duration) *http.Client {
+	return &http.Client{Timeout: timeout, Transport: telegramStatusTransport{base: http.DefaultTransport}}
 }
 
 func sendOutgoing(ctx context.Context, token string, chatID any, message outgoing) (int, error) {
@@ -74,15 +107,19 @@ func sendOutgoing(ctx context.Context, token string, chatID any, message outgoin
 	if message.attachment != nil && message.attachment.upload {
 		timeout = uploadTimeout
 	}
-	client, err := newClient(token, timeout)
-	if err != nil {
-		return 0, err
-	}
-	requestCtx, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
+	return retryTelegram(ctx, message.retries, timeout, func(requestCtx context.Context) (int, error) {
+		client, err := newClient(token, timeout)
+		if err != nil {
+			return 0, err
+		}
+		return sendOutgoingAttempt(requestCtx, client, chatID, message)
+	}, waitForRetry)
+}
+
+func sendOutgoingAttempt(ctx context.Context, client *bot.Bot, chatID any, message outgoing) (int, error) {
 	if message.attachment == nil {
 		params := newSendMessageParams(chatID, message)
-		msg, err := client.SendMessage(requestCtx, params)
+		msg, err := client.SendMessage(ctx, params)
 		if err != nil {
 			return 0, err
 		}
@@ -90,14 +127,14 @@ func sendOutgoing(ctx context.Context, token string, chatID any, message outgoin
 	}
 	if message.asDocument {
 		params := newSendDocumentParams(chatID, message)
-		msg, err := client.SendDocument(requestCtx, params)
+		msg, err := client.SendDocument(ctx, params)
 		if err != nil {
 			return 0, err
 		}
 		return msg.ID, nil
 	}
 	params := newSendPhotoParams(chatID, message)
-	msg, err := client.SendPhoto(requestCtx, params)
+	msg, err := client.SendPhoto(ctx, params)
 	if err != nil {
 		return 0, err
 	}
@@ -120,7 +157,7 @@ func newSendMessageParams(chatID any, message outgoing) *bot.SendMessageParams {
 func newSendPhotoParams(chatID any, message outgoing) *bot.SendPhotoParams {
 	params := &bot.SendPhotoParams{
 		ChatID:              chatID,
-		Photo:               message.attachment.file,
+		Photo:               message.attachment.inputFile(),
 		Caption:             message.text,
 		ParseMode:           models.ParseMode(message.parseMode),
 		DisableNotification: message.silent,
@@ -134,7 +171,7 @@ func newSendPhotoParams(chatID any, message outgoing) *bot.SendPhotoParams {
 func newSendDocumentParams(chatID any, message outgoing) *bot.SendDocumentParams {
 	params := &bot.SendDocumentParams{
 		ChatID:              chatID,
-		Document:            message.attachment.file,
+		Document:            message.attachment.inputFile(),
 		Caption:             message.text,
 		ParseMode:           models.ParseMode(message.parseMode),
 		DisableNotification: message.silent,
@@ -143,6 +180,73 @@ func newSendDocumentParams(chatID any, message outgoing) *bot.SendDocumentParams
 		params.ReplyMarkup = markup
 	}
 	return params
+}
+
+type retryWait func(context.Context, time.Duration) error
+
+func waitForRetry(ctx context.Context, delay time.Duration) error {
+	timer := time.NewTimer(delay)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	}
+}
+
+func retryTelegram(ctx context.Context, retries int, timeout time.Duration, attempt func(context.Context) (int, error), wait retryWait) (int, error) {
+	for attemptNumber := 0; ; attemptNumber++ {
+		if err := ctx.Err(); err != nil {
+			return 0, err
+		}
+		attemptCtx, cancel := context.WithTimeout(ctx, timeout)
+		result, err := attempt(attemptCtx)
+		cancel()
+		if err == nil {
+			return result, nil
+		}
+		if attemptNumber >= retries || !isRetryableTelegramError(ctx, err) {
+			return 0, err
+		}
+		if err := wait(ctx, retryDelay(attemptNumber, err)); err != nil {
+			return 0, err
+		}
+	}
+}
+
+func isRetryableTelegramError(parent context.Context, err error) bool {
+	if parent.Err() != nil || errors.Is(err, context.Canceled) {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	var tooMany *bot.TooManyRequestsError
+	if errors.As(err, &tooMany) {
+		return true
+	}
+	var statusErr *telegramHTTPStatusError
+	if errors.As(err, &statusErr) {
+		return statusErr.statusCode >= http.StatusInternalServerError && statusErr.statusCode < 600
+	}
+	var urlErr *url.Error
+	if errors.As(err, &urlErr) {
+		return true
+	}
+	var networkErr net.Error
+	return errors.As(err, &networkErr)
+}
+
+func retryDelay(attemptNumber int, err error) time.Duration {
+	var tooMany *bot.TooManyRequestsError
+	if errors.As(err, &tooMany) && tooMany.RetryAfter > 0 {
+		return time.Duration(tooMany.RetryAfter) * time.Second
+	}
+	if attemptNumber >= 5 {
+		return 30 * time.Second
+	}
+	return time.Second << attemptNumber
 }
 
 func answerCallbackQuery(ctx context.Context, token, callbackQueryID string) error {

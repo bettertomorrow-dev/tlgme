@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -21,6 +22,23 @@ func (o *stringOption) Set(value string) error {
 }
 
 func (o *stringOption) String() string { return o.value }
+
+type intOption struct {
+	value int
+	set   bool
+}
+
+func (o *intOption) Set(value string) error {
+	parsed, err := strconv.Atoi(value)
+	if err != nil {
+		return err
+	}
+	o.value = parsed
+	o.set = true
+	return nil
+}
+
+func (o *intOption) String() string { return strconv.Itoa(o.value) }
 
 type stringList []string
 
@@ -51,6 +69,7 @@ type cliOptions struct {
 	dryRun     bool
 	timeout    time.Duration
 	timeoutSet bool
+	retry      intOption
 }
 
 type settings struct {
@@ -59,7 +78,7 @@ type settings struct {
 }
 
 func parseCLI(args []string) (cliOptions, error) {
-	opts := cliOptions{parseMode: stringOption{value: "HTML"}}
+	opts := cliOptions{retry: intOption{value: defaultRetryAttempts}, parseMode: stringOption{value: "HTML"}}
 	flags := flag.NewFlagSet("tlgme", flag.ContinueOnError)
 	flags.SetOutput(io.Discard)
 	flags.Var(&opts.parseMode, "parse-mode", "HTML (default), MarkdownV2, or plain text")
@@ -67,6 +86,7 @@ func parseCLI(args []string) (cliOptions, error) {
 	flags.Var(&opts.image, "image", "image URL, path, data URI, base64 data, or - for stdin")
 	flags.Var(&opts.file, "file", "file URL, path, data URI, base64 data, or - for stdin")
 	flags.Var(&opts.filename, "filename", "filename for a base64 or stdin attachment")
+	flags.Var(&opts.retry, "retry", "additional Telegram send attempts after a retryable failure")
 	flags.BoolVar(&opts.prompt, "prompt", false, "wait for a Telegram reply")
 	flags.BoolVar(&opts.silent, "silent", false, "send without a notification sound")
 	flags.DurationVar(&opts.timeout, "timeout", promptTimeout, "maximum time to wait for a prompt reply")
@@ -111,19 +131,22 @@ func parseCLI(args []string) (cliOptions, error) {
 		if opts.timeoutSet && !opts.prompt {
 			return cliOptions{}, errors.New("--timeout requires --prompt")
 		}
+		if opts.retry.set {
+			return cliOptions{}, errors.New("--retry cannot be combined with --help")
+		}
 		return opts, nil
 	}
 	if flags.NArg() != 0 {
 		return cliOptions{}, fmt.Errorf("unexpected positional arguments: %s\n\n%s", strings.Join(flags.Args(), " "), usageText)
 	}
 	if opts.version {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.timeoutSet || opts.silent || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.update || opts.dryRun {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.retry.set || opts.timeoutSet || opts.silent || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.update || opts.dryRun {
 			return cliOptions{}, errors.New("--version cannot be combined with other options")
 		}
 		return opts, nil
 	}
 	if opts.update {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.timeoutSet || opts.silent || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.dryRun {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.retry.set || opts.timeoutSet || opts.silent || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.setToken.set || opts.setChatID.set || opts.dryRun {
 			return cliOptions{}, errors.New("--update cannot be combined with other options")
 		}
 		return opts, nil
@@ -131,7 +154,7 @@ func parseCLI(args []string) (cliOptions, error) {
 
 	setMode := opts.setToken.set || opts.setChatID.set
 	if setMode {
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.timeoutSet || opts.silent || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.dryRun {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.retry.set || opts.timeoutSet || opts.silent || len(opts.buttons) > 0 || opts.learn || opts.token.set || opts.chatID.set || opts.dryRun {
 			return cliOptions{}, errors.New("--set-token and --set-chat-id cannot be combined with action or override flags")
 		}
 		if opts.setToken.set && strings.TrimSpace(opts.setToken.value) == "" {
@@ -149,7 +172,7 @@ func parseCLI(args []string) (cliOptions, error) {
 		if opts.dryRun {
 			return cliOptions{}, errors.New("--dry-run cannot be combined with --learn")
 		}
-		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.timeoutSet || opts.silent || len(opts.buttons) > 0 {
+		if opts.text.set || opts.image.set || opts.file.set || opts.filename.set || opts.prompt || opts.retry.set || opts.timeoutSet || opts.silent || len(opts.buttons) > 0 {
 			return cliOptions{}, errors.New("--learn cannot be combined with --text, --image, --file, --filename, --prompt, or --button")
 		}
 		if opts.chatID.set {
@@ -167,6 +190,12 @@ func parseCLI(args []string) (cliOptions, error) {
 	}
 	if opts.image.set && opts.file.set {
 		return cliOptions{}, errors.New("--image and --file cannot be combined")
+	}
+	if opts.retry.value < 0 {
+		return cliOptions{}, errors.New("--retry must be zero or greater")
+	}
+	if opts.retry.set && !opts.text.set && !opts.image.set && !opts.file.set {
+		return cliOptions{}, errors.New("--retry requires --text, --image, or --file")
 	}
 	if opts.filename.set && !opts.image.set && !opts.file.set {
 		return cliOptions{}, errors.New("--filename requires --image or --file")
@@ -212,6 +241,7 @@ Options:
   --image SOURCE     Send an inline image from a URL, path, data URI, base64 data, or stdin.
   --file SOURCE      Send a file from a URL, path, data URI, base64 data, or stdin.
   --filename NAME    Override an attachment filename.
+  --retry N         Retry a Telegram send up to N additional times (default 2).
   --prompt           Wait for a text reply or button tap.
   --silent           Send without a notification sound.
   --timeout DURATION Maximum time to wait for a prompt reply (default 5m).
