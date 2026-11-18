@@ -84,3 +84,6 @@ tlgme --version
 
 Never move an existing release tag. Publish a new patch release for application
 or build defects.
+
+See [WinGet publishing](winget.md) for the one-time manifest submission and
+the automated Windows package updates.
